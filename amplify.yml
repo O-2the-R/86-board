@@ -1,0 +1,18 @@
+# Build recipe for AWS Amplify Hosting. Amplify reads this on every push:
+# install, type-check and build, then publish the dist folder.
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm ci
+    build:
+      commands:
+        - npm run build
+  artifacts:
+    baseDirectory: dist
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
