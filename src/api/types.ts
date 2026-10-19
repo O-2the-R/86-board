@@ -8,12 +8,14 @@ export interface ManageStaffInput {
   displayName?: string;
   role?: StaffRole;
   restaurantId?: string;
+  password?: string; // create only; empty means a temporary password
 }
 
 export interface ManageStaffResult {
   ok: boolean;
   username: string;
   temporaryPassword?: string;
+  passwordSet?: boolean; // a chosen password was set for good
   active?: boolean;
 }
 

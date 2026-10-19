@@ -229,6 +229,7 @@ function AddForm({ session, restaurants, onDone }: { session: Session; restauran
   const [touched, setTouched] = useState(false);
   const [role, setRole] = useState<StaffRole>('server');
   const [restaurantId, setRestaurantId] = useState(owner ? (restaurants[0]?.id ?? '') : session.restaurantId);
+  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -240,11 +241,15 @@ function AddForm({ session, restaurants, onDone }: { session: Session; restauran
     setBusy(true);
     setError(null);
     try {
-      const res = await api.manageStaff({ action: 'create', username: finalUsername, displayName: name.trim(), role, restaurantId });
-      await onDone({
-        title: `${name.trim()} can sign in as ${res.username} with this temporary password. They will choose their own the first time.`,
-        password: res.temporaryPassword,
-      });
+      const res = await api.manageStaff({ action: 'create', username: finalUsername, displayName: name.trim(), role, restaurantId, password: password.trim() });
+      await onDone(
+        res.passwordSet
+          ? { title: `${name.trim()} can sign in as ${res.username} with the password you chose.` }
+          : {
+              title: `${name.trim()} can sign in as ${res.username} with this temporary password. They will choose their own the first time.`,
+              password: res.temporaryPassword,
+            },
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'That did not save.');
     } finally {
@@ -314,6 +319,30 @@ function AddForm({ session, restaurants, onDone }: { session: Session; restauran
           </div>
         </div>
       )}
+
+      <div className="field">
+        <label className="field-label" htmlFor="add-pass">
+          Password, optional
+        </label>
+        <input
+          id="add-pass"
+          className="input"
+          type="text"
+          autoComplete="off"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          placeholder="Leave empty for a temporary one"
+          minLength={8}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        <span className="hint">
+          {password.trim()
+            ? 'This becomes their password. At least 8 characters with a capital letter, a number and a symbol.'
+            : 'Empty means they get a temporary password and choose their own at first sign-in.'}
+        </span>
+      </div>
 
       {error && (
         <p className="error" role="alert">

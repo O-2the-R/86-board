@@ -50,6 +50,7 @@ interface ManageArgs {
   displayName?: string | null;
   role?: string | null;
   restaurantId?: string | null;
+  password?: string | null;
 }
 interface SeedArgs {
   confirm: string;
@@ -133,11 +134,21 @@ async function manageStaff(actor: Actor, args: ManageArgs) {
     if (!actor.isOwner && !actor.managerOf.includes(restaurantId)) throw new Refused('You can only add staff at your own restaurant.');
     if (await userExists(username)) throw new Refused(`The username ${username} is already taken.`);
 
-    const password = tempPassword();
-    await createLogin(username, displayName, groupFor(restaurantId, role), password, false);
+    // A chosen password is set for good. No password means a temporary one.
+    const chosen = (args.password ?? '').trim();
+    if (chosen && chosen.length < 8) throw new Refused('A password needs at least 8 characters, with a capital letter, a number and a symbol.');
+    const password = chosen || tempPassword();
+    try {
+      await createLogin(username, displayName, groupFor(restaurantId, role), password, Boolean(chosen));
+    } catch (e) {
+      if (e instanceof Error && /password/i.test(e.message)) {
+        throw new Refused('That password is too simple. Use at least 8 characters with a capital letter, a lowercase letter, a number and a symbol.');
+      }
+      throw e;
+    }
     const res = await client.models.Staff.create({ id: username, username, displayName, role, restaurantId, active: true, lastChangedBy: by });
     firstError(res, 'Saving the staff record');
-    return { ok: true, username, temporaryPassword: password };
+    return chosen ? { ok: true, username, passwordSet: true } : { ok: true, username, temporaryPassword: password };
   }
 
   // Everything below acts on an existing person.

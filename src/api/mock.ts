@@ -205,7 +205,7 @@ export const mockApi: BoardApi = {
       if (!input.displayName || !input.role || !input.restaurantId) throw new Error('Name, role and restaurant are required.');
       store.staff.push({ username, displayName: input.displayName.trim(), role: input.role, restaurantId: input.restaurantId, active: true });
       save(store);
-      return { ok: true, username, temporaryPassword: 'Board-4821!' };
+      return input.password ? { ok: true, username, passwordSet: true } : { ok: true, username, temporaryPassword: 'Board-4821!' };
     }
     const p = store.staff.find((s) => s.username === username);
     if (!p) throw new Error(`No staff record for ${username}.`);

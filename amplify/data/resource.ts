@@ -72,6 +72,8 @@ const schema = a
       .authorization((allow) => [allow.authenticated().to(['read'])]),
 
     // action: create | deactivate | reactivate | resetPassword
+    // password: optional on create. Given, it is the person's real password;
+    // left out, they get a temporary one and choose their own at first sign-in.
     manageStaff: a
       .mutation()
       .arguments({
@@ -80,6 +82,7 @@ const schema = a
         displayName: a.string(),
         role: a.string(),
         restaurantId: a.string(),
+        password: a.string(),
       })
       .returns(a.json())
       .authorization((allow) => [allow.groups(['owner', 'main-manager', 'water-manager', 'counter-manager'])])

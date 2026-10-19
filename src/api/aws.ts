@@ -177,6 +177,7 @@ export const awsApi: BoardApi = {
       displayName: input.displayName,
       role: input.role,
       restaurantId: input.restaurantId,
+      password: input.password || undefined,
     });
     return parseJson<ManageStaffResult>(check(res, 'Updating staff'));
   },
