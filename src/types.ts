@@ -1,11 +1,18 @@
-// The shapes of the data the app works with. The sample data today and the
-// AWS database later both produce these same shapes.
+// The shapes of the data the app works with. The sample data and the AWS
+// database both produce these same shapes.
 
-export type Role = 'manager' | 'kitchen' | 'server' | 'host';
+export type StaffRole = 'manager' | 'kitchen' | 'server' | 'host';
+export type Role = 'owner' | StaffRole;
 
-// Managers and kitchen can change the board. Servers and hosts can only look.
-export const EDITOR_ROLES: readonly Role[] = ['manager', 'kitchen'];
-export const canEditRole = (role: Role): boolean => EDITOR_ROLES.includes(role);
+export const STAFF_ROLES: StaffRole[] = ['manager', 'kitchen', 'server', 'host'];
+
+export const ROLE_LABEL: Record<Role, string> = {
+  owner: 'Owner',
+  manager: 'Manager',
+  kitchen: 'Kitchen',
+  server: 'Server',
+  host: 'Host',
+};
 
 export type ItemStatus = 'available' | 'out';
 
@@ -21,6 +28,7 @@ export interface MenuItem {
   name: string;
   category: string;
   vendor?: string; // who supplies it; used later for the vendor notes
+  sortOrder?: number;
   status: ItemStatus;
   outSince?: string; // ISO time, set while the item is 86'd
   note?: string; // why it is out
@@ -39,3 +47,25 @@ export interface EightySixEvent {
   markedBy: string;
   clearedBy?: string;
 }
+
+export interface Staff {
+  username: string;
+  displayName: string;
+  role: Role;
+  restaurantId: string; // 'all' for the owner
+  active: boolean;
+}
+
+// Who is signed in. Comes from the login (AWS) or the sample picker.
+export interface Session {
+  username: string;
+  displayName: string;
+  role: Role;
+  restaurantId: string; // 'all' for the owner
+}
+
+export const isOwner = (s: Session): boolean => s.role === 'owner';
+export const canEditBoard = (s: Session, restaurantId: string): boolean =>
+  isOwner(s) || (s.restaurantId === restaurantId && (s.role === 'manager' || s.role === 'kitchen'));
+export const canManageStaff = (s: Session): boolean => isOwner(s) || s.role === 'manager';
+export const canSeeRestaurant = (s: Session, restaurantId: string): boolean => isOwner(s) || s.restaurantId === restaurantId;

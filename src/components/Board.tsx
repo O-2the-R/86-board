@@ -1,12 +1,13 @@
-// The board itself: what is 86'd right now on top, the full menu below.
-// Editors tap an item to 86 it (with an optional note) and tap "Back on"
-// when it returns. Viewers only see the status.
+// The board itself: what is eighty-sixed on top, the full menu by course
+// below. Editors tap an item to 86 it (with an optional note) and tap
+// "Back on" when it returns. Everyone else only reads.
 import { useEffect, useMemo, useState } from 'react';
 import type { MenuItem } from '../types';
 import { api } from '../api';
 import { fmtDuration, fmtTime } from '../lib/format';
 
 const QUICK_NOTES = ['Sold out', "Didn't come in", 'Vendor short', 'Quality, pulled', 'Back tomorrow'];
+const COUNT_WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
 
 interface Props {
   items: MenuItem[];
@@ -20,6 +21,7 @@ export function Board({ items, canEdit, actor, loading, onChanged }: Props) {
   const [query, setQuery] = useState('');
   const [target, setTarget] = useState<MenuItem | null>(null); // item about to be 86'd
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const now = Date.now();
 
   const out = useMemo(
@@ -28,7 +30,7 @@ export function Board({ items, canEdit, actor, loading, onChanged }: Props) {
   );
 
   const q = query.trim().toLowerCase();
-  const groups = useMemo(() => {
+  const courses = useMemo(() => {
     const map = new Map<string, MenuItem[]>();
     for (const it of items) {
       if (q && !it.name.toLowerCase().includes(q) && !it.category.toLowerCase().includes(q)) continue;
@@ -39,78 +41,81 @@ export function Board({ items, canEdit, actor, loading, onChanged }: Props) {
     return [...map.entries()];
   }, [items, q]);
 
-  async function back(item: MenuItem) {
-    setBusyId(item.id);
+  async function run(id: string, work: () => Promise<void>) {
+    setBusyId(id);
+    setError(null);
     try {
-      await api.markBack(item.id, actor);
+      await work();
       onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'That did not save. Try again.');
     } finally {
       setBusyId(null);
     }
   }
 
-  async function confirmOut(note: string) {
+  const back = (item: MenuItem) => run(item.id, () => api.markBack(item.id, actor));
+
+  function confirmOut(note: string) {
     if (!target) return;
     const item = target;
     setTarget(null);
-    setBusyId(item.id);
-    try {
-      await api.markOut(item.id, note, actor);
-      onChanged();
-    } finally {
-      setBusyId(null);
-    }
+    void run(item.id, () => api.markOut(item.id, note, actor));
   }
 
+  const countWord = out.length <= 10 ? COUNT_WORDS[out.length] : String(out.length);
+
   return (
-    <div className="board">
-      <section aria-labelledby="out-heading">
-        <div className="out-head">
-          <h2 id="out-heading" className="display">
-            86'd right now
-          </h2>
-          <span className="count" aria-label={`${out.length} items out`}>
-            {out.length}
-          </span>
+    <>
+      <section className="sec" aria-labelledby="out-heading">
+        <h2 id="out-heading" className="sec-head is-86">
+          Eighty-sixed this evening
+        </h2>
+        <div className="sec-sub caps-sm">
+          {loading && items.length === 0 ? 'Loading' : `${countWord} ${out.length === 1 ? 'item' : 'items'}`}
         </div>
 
-        {loading && items.length === 0 ? (
-          <p className="muted">Loading the board…</p>
-        ) : out.length === 0 ? (
-          <p className="allgood">Nothing is 86'd. The whole menu is available.</p>
+        {error && (
+          <p className="error center" role="alert" style={{ marginTop: 10 }}>
+            {error}
+          </p>
+        )}
+
+        {!loading && out.length === 0 ? (
+          <p className="allgood">Nothing is eighty-sixed. The whole menu is available.</p>
         ) : (
-          <ul className="out-list">
+          <ul className="ledger">
             {out.map((it) => (
-              <li key={it.id} className="out-card">
-                <div className="out-main">
-                  <div className="out-name">{it.name}</div>
-                  <div className="out-meta">
-                    <span>{it.category}</span>
-                    {it.outSince && (
-                      <span>
-                        since {fmtTime(it.outSince)} · {fmtDuration(now - Date.parse(it.outSince))}
-                      </span>
-                    )}
-                  </div>
-                  {it.note && <div className="out-note">“{it.note}”</div>}
-                  {it.markedBy && <div className="out-by">{it.markedBy}</div>}
+              <li key={it.id} className="ledger-row">
+                <div className="ledger-main">
+                  <div className="ledger-name">{it.name}</div>
+                  {it.note && <div className="ledger-note">{it.note}</div>}
+                  {it.markedBy && <div className="ledger-by">{it.markedBy}</div>}
                 </div>
-                {canEdit && (
-                  <button type="button" className="btn btn-back" disabled={busyId === it.id} onClick={() => back(it)}>
-                    Back on
-                  </button>
-                )}
+                <div className="ledger-side">
+                  {it.outSince && (
+                    <div className="ledger-time">
+                      {fmtTime(it.outSince)} · {fmtDuration(now - Date.parse(it.outSince))}
+                    </div>
+                  )}
+                  {canEdit && (
+                    <button type="button" className="btn btn-sm" disabled={busyId === it.id} onClick={() => back(it)}>
+                      Back on
+                    </button>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
         )}
       </section>
 
-      <section aria-labelledby="menu-heading">
-        <div className="menu-head">
-          <h2 id="menu-heading" className="display">
-            Full menu
-          </h2>
+      <section className="sec" aria-labelledby="menu-heading">
+        <h2 id="menu-heading" className="sr-only">
+          Full menu
+        </h2>
+        <div className="menu-tools">
+          <p className="hint">{canEdit ? 'Tap an item to eighty-six it.' : 'View only. Managers and kitchen update the board.'}</p>
           <input
             id="menu-search"
             className="search"
@@ -121,36 +126,30 @@ export function Board({ items, canEdit, actor, loading, onChanged }: Props) {
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        <p className="hint">
-          {canEdit ? 'Tap an item to 86 it. Tap “Back on” when it is back.' : 'View only. Managers and kitchen update the board.'}
-        </p>
 
-        {groups.map(([category, list]) => (
-          <div key={category} className="cat">
-            <h3 className="cat-h">{category}</h3>
-            <ul className="rows">
+        {courses.map(([course, list]) => (
+          <div key={course} className="course">
+            <h3 className="course-head display-caps">{course}</h3>
+            <ul>
               {list.map((it) => {
                 const isOut = it.status === 'out';
+                const status = isOut ? <span className="status-out">86'd</span> : <span className="status-ok caps-sm">Available</span>;
                 return (
-                  <li key={it.id} className={'row' + (isOut ? ' is-out' : '')}>
+                  <li key={it.id} className={'menu-row' + (isOut ? ' is-out' : '')}>
                     {canEdit && !isOut ? (
-                      <button type="button" className="row-btn" disabled={busyId === it.id} onClick={() => setTarget(it)}>
-                        <span className="row-name">{it.name}</span>
-                        <span className="chip chip-ok">Available</span>
+                      <button type="button" className="menu-row-inner" disabled={busyId === it.id} onClick={() => setTarget(it)}>
+                        <span className="menu-name">{it.name}</span>
+                        {status}
                       </button>
                     ) : (
-                      <div className="row-static">
-                        <span className="row-name">{it.name}</span>
-                        {isOut ? (
-                          canEdit ? (
-                            <button type="button" className="btn btn-back btn-sm" disabled={busyId === it.id} onClick={() => back(it)}>
-                              Back on
-                            </button>
-                          ) : (
-                            <span className="chip chip-out">86'd</span>
-                          )
+                      <div className="menu-row-inner">
+                        <span className="menu-name">{it.name}</span>
+                        {isOut && canEdit ? (
+                          <button type="button" className="btn btn-sm" disabled={busyId === it.id} onClick={() => back(it)}>
+                            Back on
+                          </button>
                         ) : (
-                          <span className="chip chip-ok">Available</span>
+                          status
                         )}
                       </div>
                     )}
@@ -160,16 +159,16 @@ export function Board({ items, canEdit, actor, loading, onChanged }: Props) {
             </ul>
           </div>
         ))}
-        {!loading && groups.length === 0 && <p className="muted">No items match “{query}”.</p>}
+        {!loading && courses.length === 0 && <p className="hint center" style={{ marginTop: 16 }}>No items match “{query}”.</p>}
       </section>
 
       {target && <OutSheet item={target} onCancel={() => setTarget(null)} onConfirm={confirmOut} />}
-    </div>
+    </>
   );
 }
 
-// The bottom sheet that confirms an 86. Confirmation lives in the page
-// because browser pop-ups are not available inside the artifact viewer.
+// The sheet that confirms an 86. Confirmation lives in the page because
+// browser pop-ups are not available everywhere the app runs.
 function OutSheet({ item, onCancel, onConfirm }: { item: MenuItem; onCancel: () => void; onConfirm: (note: string) => void }) {
   const [note, setNote] = useState('');
 
@@ -184,37 +183,28 @@ function OutSheet({ item, onCancel, onConfirm }: { item: MenuItem; onCancel: () 
   return (
     <div className="sheet-backdrop" onClick={onCancel}>
       <div className="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-heading" onClick={(e) => e.stopPropagation()}>
-        <h2 id="sheet-heading" className="display">
-          86 {item.name}?
+        <h2 id="sheet-heading" className="sheet-title display italic">
+          Eighty-six {item.name}?
         </h2>
-        <p className="muted">Everyone sees it within 5 seconds.</p>
-        <div className="quick">
+        <p className="hint center">Everyone sees it within five seconds.</p>
+        <div className="chips">
           {QUICK_NOTES.map((n) => (
-            <button
-              key={n}
-              type="button"
-              className={'quick-btn' + (note === n ? ' is-on' : '')}
-              onClick={() => setNote(note === n ? '' : n)}
-            >
+            <button key={n} type="button" className={'chip' + (note === n ? ' is-on' : '')} onClick={() => setNote(note === n ? '' : n)}>
               {n}
             </button>
           ))}
         </div>
-        <input
-          id="sheet-note"
-          className="note-input"
-          type="text"
-          placeholder="Note (optional)"
-          aria-label="Note"
-          maxLength={80}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-        />
+        <div className="field">
+          <label className="field-label" htmlFor="sheet-note">
+            Note, optional
+          </label>
+          <input id="sheet-note" className="input" type="text" placeholder="Out until Thursday delivery" maxLength={80} value={note} onChange={(e) => setNote(e.target.value)} />
+        </div>
         <div className="sheet-actions">
-          <button type="button" className="btn" onClick={onCancel}>
+          <button type="button" className="btn btn-text" onClick={onCancel}>
             Cancel
           </button>
-          <button type="button" className="btn btn-danger" onClick={() => onConfirm(note.trim())}>
+          <button type="button" className="btn btn-ox" onClick={() => onConfirm(note.trim())}>
             Mark 86'd
           </button>
         </div>

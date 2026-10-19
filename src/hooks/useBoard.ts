@@ -1,25 +1,41 @@
 // The 5-second heartbeat. Asks the data drawer for the board, remembers when
 // the last good answer arrived, and tries again whenever the phone wakes up
-// or comes back online. The freshness pill reads lastOk to know if the board
-// can be trusted.
+// or comes back online. The freshness line reads lastOk to know if the board
+// can be trusted. Every beat also checks the account is still switched on.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MenuItem } from '../types';
 import { api } from '../api';
 import { SAMPLE_KEY } from '../api/mock';
 
-export function useBoard(restaurantId: string, intervalMs = 5000) {
+interface Options {
+  username: string;
+  onRevoked: () => void; // a manager switched this account off
+  intervalMs?: number;
+}
+
+export function useBoard(restaurantId: string, { username, onRevoked, intervalMs = 5000 }: Options) {
   const [items, setItems] = useState<MenuItem[]>([]);
   const [lastOk, setLastOk] = useState<number | null>(null);
   const [failing, setFailing] = useState(false);
   const [loading, setLoading] = useState(true);
   const current = useRef(restaurantId);
   current.current = restaurantId;
+  const revoked = useRef(onRevoked);
+  revoked.current = onRevoked;
 
   const refresh = useCallback(async () => {
     const id = restaurantId;
+    if (!id) {
+      setLoading(false);
+      return;
+    }
     try {
-      const data = await api.listItems(id);
+      const [data, stillValid] = await Promise.all([api.listItems(id), api.accessStillValid(username)]);
       if (current.current !== id) return; // switched restaurants mid-request
+      if (!stillValid) {
+        revoked.current();
+        return;
+      }
       setItems(data);
       setLastOk(Date.now());
       setFailing(false);
@@ -28,7 +44,7 @@ export function useBoard(restaurantId: string, intervalMs = 5000) {
     } finally {
       if (current.current === id) setLoading(false);
     }
-  }, [restaurantId]);
+  }, [restaurantId, username]);
 
   useEffect(() => {
     setLoading(true);
