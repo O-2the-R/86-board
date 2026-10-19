@@ -4,8 +4,8 @@ import { generateClient } from 'aws-amplify/data';
 import { confirmSignIn, fetchAuthSession, getCurrentUser, signIn, signOut } from 'aws-amplify/auth';
 import type { Schema } from '../../amplify/data/resource';
 import { editorGroupsFor } from '../../shared/sample-data';
-import type { BoardApi, ManageStaffInput, ManageStaffResult, SeedResult, SignInResult } from './types';
-import type { EightySixEvent, MenuItem, Restaurant, Role, Session, Staff } from '../types';
+import type { BoardApi, ManageStaffInput, ManageStaffResult, PushSubscriptionInput, SeedResult, SignInResult } from './types';
+import type { EightySixEvent, ItemStatus, MenuItem, Restaurant, Role, Session, Staff } from '../types';
 
 type Client = ReturnType<typeof generateClient<Schema>>;
 let cached: Client | null = null;
@@ -39,6 +39,8 @@ async function sessionFromTokens(): Promise<Session | null> {
   return { username, displayName, ...parseGroups(groups) };
 }
 
+const toStatus = (s: string): ItemStatus => (s === 'out' ? 'out' : s === 'low' ? 'low' : 'available');
+
 const toItem = (i: Schema['MenuItem']['type']): MenuItem => ({
   id: i.id,
   restaurantId: i.restaurantId,
@@ -46,11 +48,25 @@ const toItem = (i: Schema['MenuItem']['type']): MenuItem => ({
   category: i.category,
   vendor: orUndef(i.vendor),
   sortOrder: orUndef(i.sortOrder),
-  status: i.status === 'out' ? 'out' : 'available',
+  status: toStatus(i.status),
   outSince: orUndef(i.outSince),
   note: orUndef(i.note),
   markedBy: orUndef(i.markedBy),
+  lowCount: orUndef(i.lowCount),
+  lowSince: orUndef(i.lowSince),
 });
+
+// Ends the 86 entry that is still open for this item.
+async function closeOpenEvent(restaurantId: string, itemId: string, now: string, by: string) {
+  const open = check(
+    await client().models.EightySixEvent.listEightySixEventByRestaurantIdAndStartedAt(
+      { restaurantId },
+      { sortDirection: 'DESC', limit: 100, filter: { itemId: { eq: itemId }, endedAt: { attributeExists: false } } },
+    ),
+    'Finding the open history entry',
+  );
+  await Promise.all(open.map((e) => client().models.EightySixEvent.update({ id: e.id, endedAt: now, clearedBy: by })));
+}
 
 const toEvent = (e: Schema['EightySixEvent']['type']): EightySixEvent => ({
   id: e.id,
@@ -125,7 +141,10 @@ export const awsApi: BoardApi = {
     const item = check(await client().models.MenuItem.get({ id: itemId }), 'Finding the item');
     if (!item || item.status === 'out') return;
     const now = new Date().toISOString();
-    check(await client().models.MenuItem.update({ id: itemId, status: 'out', outSince: now, note: note || null, markedBy: by }), 'Marking the item 86’d');
+    check(
+      await client().models.MenuItem.update({ id: itemId, status: 'out', outSince: now, note: note || null, markedBy: by, lowCount: null, lowSince: null }),
+      'Marking the item 86’d',
+    );
     check(
       await client().models.EightySixEvent.create({
         restaurantId: item.restaurantId,
@@ -140,19 +159,35 @@ export const awsApi: BoardApi = {
     );
   },
 
+  async markLow(itemId, count, by) {
+    const item = check(await client().models.MenuItem.get({ id: itemId }), 'Finding the item');
+    if (!item) return;
+    const now = new Date().toISOString();
+    const wasLow = item.status === 'low';
+    check(
+      await client().models.MenuItem.update({
+        id: itemId,
+        status: 'low',
+        lowCount: Math.max(1, Math.round(count)),
+        lowSince: wasLow && item.lowSince ? item.lowSince : now,
+        markedBy: by,
+        outSince: null,
+        note: null,
+      }),
+      'Marking the item running low',
+    );
+    if (item.status === 'out') await closeOpenEvent(item.restaurantId, itemId, now, by);
+  },
+
   async markBack(itemId, by) {
     const item = check(await client().models.MenuItem.get({ id: itemId }), 'Finding the item');
-    if (!item || item.status !== 'out') return;
+    if (!item || item.status === 'available') return;
     const now = new Date().toISOString();
-    check(await client().models.MenuItem.update({ id: itemId, status: 'available', outSince: null, note: null, markedBy: null }), 'Marking the item back on');
-    const open = check(
-      await client().models.EightySixEvent.listEightySixEventByRestaurantIdAndStartedAt(
-        { restaurantId: item.restaurantId },
-        { sortDirection: 'DESC', limit: 100, filter: { itemId: { eq: itemId }, endedAt: { attributeExists: false } } },
-      ),
-      'Finding the open history entry',
+    check(
+      await client().models.MenuItem.update({ id: itemId, status: 'available', outSince: null, note: null, markedBy: null, lowCount: null, lowSince: null }),
+      'Marking the item back on',
     );
-    await Promise.all(open.map((e) => client().models.EightySixEvent.update({ id: e.id, endedAt: now, clearedBy: by })));
+    if (item.status === 'out') await closeOpenEvent(item.restaurantId, itemId, now, by);
   },
 
   async listHistory(restaurantId, days) {
@@ -185,5 +220,18 @@ export const awsApi: BoardApi = {
   async seedDemo(): Promise<SeedResult> {
     const res = await client().mutations.seedDemo({ confirm: 'LOAD' });
     return parseJson<SeedResult>(check(res, 'Loading demo data'));
+  },
+
+  async pushPublicKey() {
+    const res = await client().queries.pushPublicKey();
+    return check(res, 'Getting the alert key') ?? null;
+  },
+
+  async subscribePush(sub: PushSubscriptionInput) {
+    check(await client().mutations.subscribePush(sub), 'Turning alerts on');
+  },
+
+  async unsubscribePush(endpoint: string) {
+    check(await client().mutations.unsubscribePush({ endpoint }), 'Turning alerts off');
   },
 };

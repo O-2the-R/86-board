@@ -1,5 +1,6 @@
 import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
 import { staffAdmin } from '../functions/staff-admin/resource';
+import { push } from '../functions/push/resource';
 
 // The shared database. Every phone reads the same tables.
 //
@@ -27,10 +28,12 @@ const schema = a
         category: a.string().required(),
         vendor: a.string(),
         sortOrder: a.integer(),
-        status: a.string().required(), // 'available' | 'out'
+        status: a.string().required(), // 'available' | 'low' | 'out'
         outSince: a.datetime(),
         note: a.string(),
         markedBy: a.string(),
+        lowCount: a.integer(), // portions left while running low
+        lowSince: a.datetime(),
         editors: a.string().array().required(), // groups allowed to update
       })
       .secondaryIndexes((index) => [index('restaurantId')])
@@ -95,8 +98,56 @@ const schema = a
       .returns(a.json())
       .authorization((allow) => [allow.group('owner')])
       .handler(a.handler.function(staffAdmin)),
+
+    // ----- Phone alerts -----
+    // One row per phone that asked for alerts. Written only by the push
+    // function, which takes the person and restaurant from their login.
+    PushSubscription: a
+      .model({
+        username: a.string().required(),
+        restaurantId: a.string().required(), // 'all' for the owner
+        endpoint: a.string().required(),
+        p256dh: a.string().required(),
+        auth: a.string().required(),
+        device: a.string(),
+      })
+      .secondaryIndexes((index) => [index('restaurantId'), index('username')])
+      .authorization((allow) => [allow.group('owner').to(['read', 'delete'])]),
+
+    // The signing key pair for alerts, made once by the push function.
+    PushKey: a
+      .model({
+        publicKey: a.string().required(),
+        privateKey: a.string().required(),
+      })
+      .authorization((allow) => [allow.group('owner').to(['read'])]),
+
+    pushPublicKey: a
+      .query()
+      .returns(a.string())
+      .authorization((allow) => [allow.authenticated()])
+      .handler(a.handler.function(push)),
+
+    subscribePush: a
+      .mutation()
+      .arguments({
+        endpoint: a.string().required(),
+        p256dh: a.string().required(),
+        auth: a.string().required(),
+        device: a.string(),
+      })
+      .returns(a.json())
+      .authorization((allow) => [allow.authenticated()])
+      .handler(a.handler.function(push)),
+
+    unsubscribePush: a
+      .mutation()
+      .arguments({ endpoint: a.string().required() })
+      .returns(a.json())
+      .authorization((allow) => [allow.authenticated()])
+      .handler(a.handler.function(push)),
   })
-  .authorization((allow) => [allow.resource(staffAdmin)]);
+  .authorization((allow) => [allow.resource(staffAdmin), allow.resource(push)]);
 
 export type Schema = ClientSchema<typeof schema>;
 

@@ -95,6 +95,22 @@ export const OPEN_SEEDS: OpenSeed[] = [
   { rest: 'counter', item: 'Cold Brew', hoursAgo: 2.2, note: 'Machine down', by: 'Alex J.' },
 ];
 
+// Items that are running low right now when the sample data is first created.
+export interface LowSeed {
+  rest: string;
+  item: string;
+  count: number; // portions left
+  minutesAgo: number;
+  by: string;
+}
+
+export const LOW_SEEDS: LowSeed[] = [
+  { rest: 'main', item: 'Ribeye 16 oz', count: 4, minutesAgo: 25, by: 'Marco R.' },
+  { rest: 'main', item: 'Olive Oil Cake', count: 2, minutesAgo: 70, by: 'Luis H.' },
+  { rest: 'water', item: 'Crab Cake', count: 6, minutesAgo: 40, by: 'Yusuf E.' },
+  { rest: 'counter', item: 'Steak Bowl', count: 3, minutesAgo: 15, by: 'Diego M.' },
+];
+
 export const CLOSED_SEEDS: ClosedSeed[] = [
   { rest: 'main', item: 'Braised Short Rib', hoursAgo: 50, hours: 3.5, note: 'Sold out', by: 'Marco R.', clearedBy: 'Priya M.' },
   { rest: 'main', item: 'Tiramisu', hoursAgo: 74, hours: 2, note: 'Sold out', by: 'Marco R.', clearedBy: 'Marco R.' },

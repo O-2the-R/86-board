@@ -40,11 +40,12 @@ export function Login({ restaurants, onSignedIn }: Props) {
   return (
     <div className="login">
       <div className="login-mark">
-        <div className="app-icon" aria-hidden="true">
-          86
+        <div className="login-ticket" aria-hidden="true">
+          <span className="stamp stamp-big">86</span>
+          <span className="login-ticket-rule" />
         </div>
         <h1 className="login-title">86 Board</h1>
-        <p className="login-sub">Whitfield Hospitality</p>
+        <p className="login-sub">What is out tonight, and since when.</p>
       </div>
 
       <form className="login-form" onSubmit={submit}>
@@ -124,7 +125,9 @@ export function Login({ restaurants, onSignedIn }: Props) {
       </form>
 
       <div className="login-foot" aria-hidden="true">
-        <span style={{ textWrap: 'balance' }}>{restaurants.map((r) => r.name).join('  ·  ')}</span>
+        {restaurants.map((r) => (
+          <span key={r.id}>{r.name}</span>
+        ))}
       </div>
     </div>
   );

@@ -8,6 +8,7 @@ import { resetSampleData } from './api/mock';
 import { readString, writeString } from './lib/storage';
 import { initials } from './lib/format';
 import { useBoard } from './hooks/useBoard';
+import { AlertsBell, AlertsNudge, AlertsSheet, useAlerts } from './components/Alerts';
 import { Board } from './components/Board';
 import { Freshness } from './components/Freshness';
 import { History } from './components/History';
@@ -88,6 +89,7 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
   const [restaurantId, setRestaurantId] = useState<string>(() => readString(storageKey) ?? '');
   const [tab, setTab] = useState<Tab>('board');
   const [historyKey, setHistoryKey] = useState(0);
+  const alerts = useAlerts(session.username);
 
   // Land on the first restaurant this person can see.
   useEffect(() => {
@@ -148,13 +150,16 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
               <span className="who-name">{session.displayName}</span>
               <span className="who-role">
                 {ROLE_LABEL[session.role]}
-                {restaurant && session.role !== 'owner' ? ` · ${restaurant.name}` : ''}
+                {restaurant && session.role !== 'owner' ? ` at ${restaurant.name}` : ''}
               </span>
             </span>
           </div>
-          <button type="button" className="link-btn" onClick={() => void onSignOut()}>
-            Sign out
-          </button>
+          <div className="topbar-actions">
+            <AlertsBell state={alerts.state} onClick={() => alerts.setOpen(true)} />
+            <button type="button" className="link-btn" onClick={() => void onSignOut()}>
+              Sign out
+            </button>
+          </div>
         </div>
       </header>
 
@@ -181,7 +186,8 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
           )}
         </div>
 
-        <main style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <main className="stack">
+          {tab === 'board' && restaurant && <AlertsNudge state={alerts.state} onOpen={() => alerts.setOpen(true)} />}
           {tab === 'board' &&
             (restaurant ? (
               <Board items={items} canEdit={canEdit} actor={session.displayName} loading={loading} onChanged={onChanged} />
@@ -210,7 +216,7 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
               <path d="M7.5 9h9M7.5 13h9M7.5 17h5" />
             </svg>
             Board
-            {outCount > 0 && <span className="tab-badge">{outCount}</span>}
+            {outCount > 0 && <span className="tab-badge num">{outCount}</span>}
           </button>
           <button type="button" className={'tab' + (tab === 'history' ? ' is-on' : '')} onClick={() => setTab('history')} aria-current={tab === 'history'}>
             <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
@@ -230,13 +236,22 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
           )}
         </div>
       </nav>
+
+      {alerts.open && (
+        <AlertsSheet
+          state={alerts.state}
+          restaurantName={session.role === 'owner' ? undefined : restaurant?.name}
+          onChange={(s) => alerts.setState(s)}
+          onClose={() => alerts.setOpen(false)}
+        />
+      )}
     </>
   );
 }
 
 function NoRestaurant({ session, goStaff }: { session: Session; goStaff: () => void }) {
   return (
-    <section className="card">
+    <section className="panel">
       <div className="empty">
         {isOwner(session) ? (
           <>

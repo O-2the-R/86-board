@@ -14,7 +14,8 @@ export const ROLE_LABEL: Record<Role, string> = {
   host: 'Host',
 };
 
-export type ItemStatus = 'available' | 'out';
+// available: plenty. low: a few portions left, with the count. out: 86'd.
+export type ItemStatus = 'available' | 'low' | 'out';
 
 export interface Restaurant {
   id: string;
@@ -32,7 +33,9 @@ export interface MenuItem {
   status: ItemStatus;
   outSince?: string; // ISO time, set while the item is 86'd
   note?: string; // why it is out
-  markedBy?: string; // who 86'd it
+  markedBy?: string; // who 86'd it, or who marked it low
+  lowCount?: number; // portions left, set while the item is running low
+  lowSince?: string; // ISO time, set while the item is running low
 }
 
 // One stretch of time an item was 86'd. This is the history.

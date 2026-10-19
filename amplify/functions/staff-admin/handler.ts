@@ -22,6 +22,7 @@ import {
 import type { Schema } from '../../data/resource';
 import {
   CLOSED_SEEDS,
+  LOW_SEEDS,
   MENUS,
   OPEN_SEEDS,
   RESTAURANTS,
@@ -118,6 +119,16 @@ async function createLogin(username: string, displayName: string, group: string,
   await cognito.send(new AdminAddUserToGroupCommand({ UserPoolId: USER_POOL_ID, Username: username, GroupName: group }));
 }
 
+// Drops every phone subscription this person registered for alerts.
+async function forgetPhones(username: string) {
+  try {
+    const rows = await client.models.PushSubscription.listPushSubscriptionByUsername({ username }, { limit: 100 });
+    await Promise.all(rows.data.map((r) => client.models.PushSubscription.delete({ id: r.id })));
+  } catch (e) {
+    console.error('could not drop phone subscriptions', e instanceof Error ? e.message : e);
+  }
+}
+
 // ---------- manageStaff ----------
 
 async function manageStaff(actor: Actor, args: ManageArgs) {
@@ -170,6 +181,7 @@ async function manageStaff(actor: Actor, args: ManageArgs) {
     }
     const res = await client.models.Staff.update({ id: username, active: false, lastChangedBy: by });
     firstError(res, 'Saving the staff record');
+    await forgetPhones(username); // no more alerts on a switched-off login
     return { ok: true, username, active: false };
   }
 
@@ -295,6 +307,11 @@ async function seedDemo(actor: Actor, args: SeedArgs) {
       const up = await client.models.MenuItem.update({ id, status: 'out', outSince: startedAt, note: s.note, markedBy: s.by });
       firstError(up, `Marking ${s.item} out`);
       counts.events += 1;
+    });
+    await inBatches(LOW_SEEDS, 8, async (s) => {
+      const id = itemIdFor(s.rest, s.item);
+      const up = await client.models.MenuItem.update({ id, status: 'low', lowCount: s.count, lowSince: ago(s.minutesAgo / 60), markedBy: s.by });
+      firstError(up, `Marking ${s.item} low`);
     });
   }
 

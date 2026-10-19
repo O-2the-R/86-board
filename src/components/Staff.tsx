@@ -113,11 +113,11 @@ export function Staff({ session, restaurants, onDataChanged }: Props) {
           </span>
           <div className="actions">
             {owner && empty && api.mode === 'aws' && !confirmSeed && (
-              <button type="button" className="btn btn-sm btn-tint" disabled={busy === 'seed'} onClick={() => setConfirmSeed(true)}>
+              <button type="button" className="btn btn-sm btn-outline" disabled={busy === 'seed'} onClick={() => setConfirmSeed(true)}>
                 Load demo data
               </button>
             )}
-            <button type="button" className={'btn btn-sm' + (showForm ? ' btn-gray' : '')} onClick={() => setShowForm((v) => !v)}>
+            <button type="button" className={'btn btn-sm' + (showForm ? ' btn-outline' : '')} onClick={() => setShowForm((v) => !v)}>
               {showForm ? 'Close' : 'Add a person'}
             </button>
           </div>
@@ -170,10 +170,9 @@ export function Staff({ session, restaurants, onDataChanged }: Props) {
       </section>
 
       {groups.map((g) => (
-        <section key={g.key} className="group" aria-label={g.title}>
-          <h3 className="group-label caption-up">{g.title}</h3>
-          <div className="card">
-            <ul>
+        <section key={g.key} className="course" aria-label={g.title}>
+          <h3 className="course-head">{g.title}</h3>
+          <ul className="list">
               {g.list.map((p) => {
                 const isMe = p.username === session.username;
                 const canAct = !isMe && (owner || p.role !== 'owner');
@@ -187,11 +186,11 @@ export function Staff({ session, restaurants, onDataChanged }: Props) {
                         {p.displayName} {isMe && <span className="me-tag">You</span>}
                       </span>
                       <span className="staff-meta">
-                        {p.username} · {ROLE_LABEL[p.role]}
+                        {p.username}, {ROLE_LABEL[p.role].toLowerCase()}
                       </span>
                     </span>
                     <span className="staff-trail">
-                      {!p.active && <span className="chip chip-off">Off</span>}
+                      {!p.active && <em className="state state-off">Off</em>}
                       {canAct && (
                         <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M9 6l6 6-6 6" />
@@ -212,8 +211,7 @@ export function Staff({ session, restaurants, onDataChanged }: Props) {
                   </li>
                 );
               })}
-            </ul>
-          </div>
+          </ul>
         </section>
       ))}
 
@@ -268,28 +266,28 @@ function PersonSheet({
             {person.displayName}
           </h2>
           <span className="caption">
-            {person.username} · {ROLE_LABEL[person.role]}
-            {restaurantName ? ` · ${restaurantName}` : ''}
-            {person.active ? '' : ' · Switched off'}
+            {person.username}, {ROLE_LABEL[person.role].toLowerCase()}
+            {restaurantName ? ` at ${restaurantName}` : ''}
+            {person.active ? '' : ', switched off'}
           </span>
         </div>
 
         {person.active ? (
           <>
-            <button type="button" className="btn btn-wide btn-gray" disabled={busy} onClick={() => onAction('resetPassword')}>
+            <button type="button" className="btn btn-wide btn-outline" disabled={busy} onClick={() => onAction('resetPassword')}>
               Reset password
             </button>
-            <button type="button" className="btn btn-wide btn-red-tint" disabled={busy} onClick={() => onAction('deactivate')}>
+            <button type="button" className="btn btn-wide btn-stamp" disabled={busy} onClick={() => onAction('deactivate')}>
               Switch off
             </button>
             <p className="hint center">Switch off signs them out right away. Their name stays in the history, and you can switch them back on later.</p>
           </>
         ) : (
           <>
-            <button type="button" className="btn btn-wide btn-green" disabled={busy} onClick={() => onAction('reactivate')}>
+            <button type="button" className="btn btn-wide btn-sage" disabled={busy} onClick={() => onAction('reactivate')}>
               Switch on
             </button>
-            <button type="button" className="btn btn-wide btn-red-tint" disabled={busy} onClick={() => (armed ? onAction('remove') : setArmed(true))}>
+            <button type="button" className="btn btn-wide btn-stamp" disabled={busy} onClick={() => (armed ? onAction('remove') : setArmed(true))}>
               {armed ? 'Tap again to remove' : 'Remove login'}
             </button>
             <p className="hint center">Remove only works for a login that was never used.</p>
@@ -323,7 +321,7 @@ function CopyLine({ label, value }: { label: string; value: string }) {
         <span className="caption">{label}</span>
         <span className="notice-pass">{value}</span>
       </span>
-      <button type="button" className="btn btn-sm btn-tint" onClick={copy}>
+      <button type="button" className="btn btn-sm btn-outline" onClick={copy}>
         {copied ? 'Copied' : 'Copy'}
       </button>
     </div>
@@ -367,7 +365,7 @@ function AddForm({ session, restaurants, onDone }: { session: Session; restauran
   }
 
   return (
-    <form className="card form" onSubmit={submit}>
+    <form className="panel form" onSubmit={submit}>
       <div className="form-row">
         <div className="field">
           <label className="field-label" htmlFor="add-name">

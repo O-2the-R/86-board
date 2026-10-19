@@ -73,16 +73,11 @@ export function History({ restaurantId, refreshKey }: Props) {
             {error}
           </p>
         )}
-        <div className="card">
+        <div className="panel">
           {top.length === 0 ? (
             <div className="empty">
-              <span className="empty-icon" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 12.5l4.5 4.5L19 7.5" />
-                </svg>
-              </span>
               <b>Clean month</b>
-              <span>Nothing was eighty-sixed in the last 30 days.</span>
+              <span>Nothing was 86'd in the last 30 days.</span>
             </div>
           ) : (
             <ol className="bars">
@@ -91,7 +86,7 @@ export function History({ restaurantId, refreshKey }: Props) {
                   <div className="bar-label">
                     <span className="bar-name">{t.name}</span>
                     <span className="bar-val">
-                      {t.count} {t.count === 1 ? 'time' : 'times'} · {fmtDuration(t.ms)}
+                      {t.count} {t.count === 1 ? 'time' : 'times'}, {fmtDuration(t.ms)}
                     </span>
                   </div>
                   <div className="bar-track" aria-hidden="true">
@@ -115,20 +110,19 @@ export function History({ restaurantId, refreshKey }: Props) {
             </span>
           </div>
           {days.map(([day, list]) => (
-            <div key={day} className="group">
-              <h3 className="group-label caption-up">{day}</h3>
-              <div className="card">
-                <ul>
+            <div key={day} className="course">
+              <h3 className="course-head">{day}</h3>
+              <ul className="list">
                   {list.map((e) => {
                     const end = e.endedAt ? Date.parse(e.endedAt) : Date.now();
                     return (
-                      <li key={e.id} className={'row' + (e.endedAt ? '' : ' is-open')}>
+                      <li key={e.id} className={'row' + (e.endedAt ? '' : ' is-out')}>
                         <div className="row-main">
-                          <span className="row-title">{e.itemName}</span>
+                          <span className="row-name">{e.itemName}</span>
                           {e.note && <span className="row-sub">{e.note}</span>}
                           <span className="row-meta">
                             {e.markedBy}
-                            {e.clearedBy ? ` · back on by ${e.clearedBy}` : ''}
+                            {e.clearedBy ? `, back on by ${e.clearedBy}` : ''}
                           </span>
                         </div>
                         <div className="row-side">
@@ -138,8 +132,7 @@ export function History({ restaurantId, refreshKey }: Props) {
                       </li>
                     );
                   })}
-                </ul>
-              </div>
+              </ul>
             </div>
           ))}
         </section>

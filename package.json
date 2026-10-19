@@ -15,9 +15,11 @@
   },
   "dependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.1152.0",
+    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
     "aws-amplify": "^6.22.2",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@aws-amplify/backend": "^1.25.1",
@@ -26,6 +28,7 @@
     "@types/node": "^22.20.5",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
+    "@types/web-push": "^3.6.4",
     "@vitejs/plugin-react": "^4.7.0",
     "aws-cdk-lib": "^2.273.0",
     "constructs": "^10.8.1",

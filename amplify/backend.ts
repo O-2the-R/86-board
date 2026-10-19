@@ -1,15 +1,18 @@
 import { defineBackend } from '@aws-amplify/backend';
 import { Stack } from 'aws-cdk-lib';
-import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
+import { Effect, Policy, PolicyStatement } from 'aws-cdk-lib/aws-iam';
+import { EventSourceMapping, StartingPosition } from 'aws-cdk-lib/aws-lambda';
 import { AwsCustomResource, AwsCustomResourcePolicy, PhysicalResourceId } from 'aws-cdk-lib/custom-resources';
 import { auth } from './auth/resource';
 import { data } from './data/resource';
 import { staffAdmin } from './functions/staff-admin/resource';
+import { push } from './functions/push/resource';
 
 const backend = defineBackend({
   auth,
   data,
   staffAdmin,
+  push,
 });
 
 const userPool = backend.auth.resources.userPool;
@@ -60,6 +63,30 @@ staffAdminLambda.addToRolePolicy(
   }),
 );
 backend.staffAdmin.addEnvironment('USER_POOL_ID', userPool.userPoolId);
+
+// ----- Phone alerts follow the board -----
+// Every change to a menu item flows from the table's change stream into the
+// push function, which buzzes the phones at that restaurant.
+const menuItemTable = backend.data.resources.tables['MenuItem'];
+const pushLambda = backend.push.resources.lambda;
+const streamPolicy = new Policy(Stack.of(menuItemTable), 'PushMenuItemStreamPolicy', {
+  statements: [
+    new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['dynamodb:DescribeStream', 'dynamodb:GetRecords', 'dynamodb:GetShardIterator', 'dynamodb:ListStreams'],
+      resources: [menuItemTable.tableStreamArn ?? `${menuItemTable.tableArn}/stream/*`],
+    }),
+  ],
+});
+pushLambda.role?.attachInlinePolicy(streamPolicy);
+const streamMapping = new EventSourceMapping(Stack.of(menuItemTable), 'PushMenuItemStream', {
+  target: pushLambda,
+  eventSourceArn: menuItemTable.tableStreamArn,
+  startingPosition: StartingPosition.LATEST,
+  batchSize: 10,
+  retryAttempts: 2,
+});
+streamMapping.node.addDependency(streamPolicy);
 
 // ----- The first owner account -----
 // Created once, when the backend is first deployed, so there is a way in.

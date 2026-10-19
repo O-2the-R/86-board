@@ -4,9 +4,9 @@
 import type { BoardApi, ManageStaffInput, ManageStaffResult, SeedResult, SignInResult } from './types';
 import type { EightySixEvent, MenuItem, Restaurant, Session, Staff } from '../types';
 import { readJSON, removeKey, writeJSON } from '../lib/storage';
-import { CLOSED_SEEDS, MENUS, OPEN_SEEDS, RESTAURANTS, STAFF, itemIdFor } from '../../shared/sample-data';
+import { CLOSED_SEEDS, LOW_SEEDS, MENUS, OPEN_SEEDS, RESTAURANTS, STAFF, itemIdFor } from '../../shared/sample-data';
 
-export const SAMPLE_KEY = 'eightysix.sample.v2';
+export const SAMPLE_KEY = 'eightysix.sample.v3';
 const SESSION_KEY = 'eightysix.sample.session';
 
 interface Store {
@@ -58,6 +58,14 @@ function seed(): Store {
     it.markedBy = s.by;
     events.push({ id: uid(), itemId: it.id, itemName: it.name, restaurantId: it.restaurantId, startedAt, note: s.note, markedBy: s.by });
   }
+  for (const s of LOW_SEEDS) {
+    const it = find(s.rest, s.item);
+    if (!it || it.status === 'out') continue;
+    it.status = 'low';
+    it.lowCount = s.count;
+    it.lowSince = ago(s.minutesAgo / 60);
+    it.markedBy = s.by;
+  }
   const staff: Staff[] = [OWNER, ...STAFF.map((p) => ({ ...p, active: true }))];
   return { restaurants: RESTAURANTS.map((r) => ({ ...r })), items, events, staff };
 }
@@ -102,6 +110,15 @@ function saveSession(s: Session | null): void {
 }
 
 const toSession = (p: Staff): Session => ({ username: p.username, displayName: p.displayName, role: p.role, restaurantId: p.restaurantId });
+
+// The 86 entry that is still open for this item gets its end time.
+function closeOpenEvent(store: Store, itemId: string, now: string, by: string): void {
+  const open = store.events.find((e) => e.itemId === itemId && !e.endedAt);
+  if (open) {
+    open.endedAt = now;
+    open.clearedBy = by;
+  }
+}
 
 export const mockApi: BoardApi = {
   mode: 'sample',
@@ -159,7 +176,26 @@ export const mockApi: BoardApi = {
     it.outSince = now;
     it.note = note || undefined;
     it.markedBy = by;
+    delete it.lowCount;
+    delete it.lowSince;
     store.events.unshift({ id: uid(), itemId: it.id, itemName: it.name, restaurantId: it.restaurantId, startedAt: now, note: note || undefined, markedBy: by });
+    save(store);
+  },
+
+  async markLow(itemId, count, by) {
+    await wait();
+    const store = load();
+    const it = store.items.find((i) => i.id === itemId);
+    if (!it) return;
+    const now = new Date().toISOString();
+    if (it.status === 'out') closeOpenEvent(store, itemId, now, by); // a few came back
+    const wasLow = it.status === 'low';
+    it.status = 'low';
+    it.lowCount = Math.max(1, Math.round(count));
+    it.lowSince = wasLow && it.lowSince ? it.lowSince : now;
+    it.markedBy = by;
+    delete it.outSince;
+    delete it.note;
     save(store);
   },
 
@@ -167,17 +203,15 @@ export const mockApi: BoardApi = {
     await wait();
     const store = load();
     const it = store.items.find((i) => i.id === itemId);
-    if (!it || it.status !== 'out') return;
+    if (!it || it.status === 'available') return;
     const now = new Date().toISOString();
-    const open = store.events.find((e) => e.itemId === itemId && !e.endedAt);
-    if (open) {
-      open.endedAt = now;
-      open.clearedBy = by;
-    }
+    if (it.status === 'out') closeOpenEvent(store, itemId, now, by);
     it.status = 'available';
     delete it.outSince;
     delete it.note;
     delete it.markedBy;
+    delete it.lowCount;
+    delete it.lowSince;
     save(store);
   },
 
@@ -228,4 +262,13 @@ export const mockApi: BoardApi = {
     load();
     return { ok: true, restaurants: 3, items: 43, events: 14, staff: 60, demoPassword: 'any password' };
   },
+
+  // Alerts need a real server to send them. The preview only shows the screens.
+  async pushPublicKey() {
+    return null;
+  },
+  async subscribePush() {
+    throw new Error('Alerts work in the real app, not in this preview.');
+  },
+  async unsubscribePush() {},
 };
