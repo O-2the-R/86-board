@@ -6,6 +6,7 @@ import { ROLE_LABEL, canEditBoard, canManageStaff, canSeeRestaurant, isOwner } f
 import { api } from './api';
 import { resetSampleData } from './api/mock';
 import { readString, writeString } from './lib/storage';
+import { initials } from './lib/format';
 import { useBoard } from './hooks/useBoard';
 import { Board } from './components/Board';
 import { Freshness } from './components/Freshness';
@@ -49,7 +50,7 @@ export default function App() {
   }
 
   if (session === undefined) {
-    return <p className="hint center" style={{ paddingTop: 80 }}>One moment…</p>;
+    return <p className="caption center" style={{ paddingTop: 80 }}>Loading…</p>;
   }
 
   if (!session) {
@@ -129,43 +130,58 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
     void reloadRestaurants();
   }
 
+  const titles: Record<Tab, string> = {
+    board: restaurant ? restaurant.name : '86 Board',
+    history: 'History',
+    staff: 'Staff',
+  };
+
   return (
     <>
-      <div className="page">
-        <header>
-          <div className="util">
-            <span className="eyebrow">
-              {session.displayName} · {ROLE_LABEL[session.role]}
+      <header className="topbar">
+        <div className="topbar-inner">
+          <div className="who">
+            <span className="avatar" aria-hidden="true">
+              {initials(session.displayName)}
             </span>
-            <button type="button" className="link-caps eyebrow" onClick={() => void onSignOut()}>
-              Sign out
-            </button>
+            <span className="who-text">
+              <span className="who-name">{session.displayName}</span>
+              <span className="who-role">
+                {ROLE_LABEL[session.role]}
+                {restaurant && session.role !== 'owner' ? ` · ${restaurant.name}` : ''}
+              </span>
+            </span>
           </div>
+          <button type="button" className="link-btn" onClick={() => void onSignOut()}>
+            Sign out
+          </button>
+        </div>
+      </header>
 
-          <div className="masthead" style={{ marginTop: 14 }}>
-            <h1 className="display masthead-title">{restaurant ? restaurant.name : '86 Board'}</h1>
-            <div className="double-rule" aria-hidden="true" />
-            {restaurant && <Freshness lastOk={lastOk} failing={failing} />}
-            {visible.length > 1 && (
-              <nav className="rnav" aria-label="Restaurant">
-                {visible.map((r, i) => (
-                  <span key={r.id} style={{ display: 'contents' }}>
-                    {i > 0 && (
-                      <span className="rnav-sep" aria-hidden="true">
-                        ·
-                      </span>
-                    )}
-                    <button type="button" className={'rnav-btn' + (r.id === restaurantId ? ' is-on' : '')} onClick={() => setRestaurantId(r.id)}>
-                      {r.name}
-                    </button>
-                  </span>
-                ))}
-              </nav>
-            )}
-          </div>
-        </header>
+      <div className="page">
+        <div className="masthead">
+          <h1 className="large-title">{titles[tab]}</h1>
+          {tab === 'board' && restaurant && <Freshness lastOk={lastOk} failing={failing} />}
+          {tab === 'history' && restaurant && <span className="caption">{restaurant.name}</span>}
+          {visible.length > 1 && (
+            <div className="seg" role="tablist" aria-label="Restaurant">
+              {visible.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={r.id === restaurantId}
+                  className={'seg-btn' + (r.id === restaurantId ? ' is-on' : '')}
+                  onClick={() => setRestaurantId(r.id)}
+                >
+                  {r.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
-        <main style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+        <main style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {tab === 'board' &&
             (restaurant ? (
               <Board items={items} canEdit={canEdit} actor={session.displayName} loading={loading} onChanged={onChanged} />
@@ -178,7 +194,7 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
           {api.mode === 'sample' && (
             <footer className="foot">
               <p>Preview with sample data. Your taps are saved on this device only. The real app shares one board across every phone.</p>
-              <button type="button" className="link-caps" style={{ alignSelf: 'flex-start' }} onClick={resetSample}>
+              <button type="button" className="link-btn" style={{ paddingLeft: 0 }} onClick={resetSample}>
                 Reset sample data
               </button>
             </footer>
@@ -186,17 +202,29 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
         </main>
       </div>
 
-      <nav className="bottom-nav" aria-label="Sections">
-        <div className="bottom-nav-inner">
-          <button type="button" className={'nav-btn' + (tab === 'board' ? ' is-on' : '')} onClick={() => setTab('board')}>
+      <nav className="tabbar" aria-label="Sections">
+        <div className="tabbar-inner">
+          <button type="button" className={'tab' + (tab === 'board' ? ' is-on' : '')} onClick={() => setTab('board')} aria-current={tab === 'board'}>
+            <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3.5" y="4" width="17" height="16" rx="3" />
+              <path d="M7.5 9h9M7.5 13h9M7.5 17h5" />
+            </svg>
             Board
-            {outCount > 0 && <span className="nav-count">{outCount}</span>}
+            {outCount > 0 && <span className="tab-badge">{outCount}</span>}
           </button>
-          <button type="button" className={'nav-btn' + (tab === 'history' ? ' is-on' : '')} onClick={() => setTab('history')}>
+          <button type="button" className={'tab' + (tab === 'history' ? ' is-on' : '')} onClick={() => setTab('history')} aria-current={tab === 'history'}>
+            <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="8.5" />
+              <path d="M12 7.5V12l3 2" />
+            </svg>
             History
           </button>
           {manages && (
-            <button type="button" className={'nav-btn' + (tab === 'staff' ? ' is-on' : '')} onClick={() => setTab('staff')}>
+            <button type="button" className={'tab' + (tab === 'staff' ? ' is-on' : '')} onClick={() => setTab('staff')} aria-current={tab === 'staff'}>
+              <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="9" cy="8.5" r="3.5" />
+                <path d="M2.5 20c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5M16 5a3.5 3.5 0 0 1 0 7M21.5 20c0-3-2-5.5-4.8-6.3" />
+              </svg>
               Staff
             </button>
           )}
@@ -207,25 +235,24 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
 }
 
 function NoRestaurant({ session, goStaff }: { session: Session; goStaff: () => void }) {
-  if (isOwner(session)) {
-    return (
-      <section className="sec">
-        <h2 className="sec-head">No restaurants yet</h2>
-        <p className="allgood">
-          Load the demo data from the Staff section to set up the three restaurants, their menus and the staff logins.
-        </p>
-        <div className="form-actions" style={{ marginTop: 14, justifyContent: 'center' }}>
-          <button type="button" className="btn btn-ink" onClick={goStaff}>
-            Go to Staff
-          </button>
-        </div>
-      </section>
-    );
-  }
   return (
-    <section className="sec">
-      <h2 className="sec-head">No restaurant assigned</h2>
-      <p className="allgood">Your login is not attached to a restaurant yet. Ask a manager to fix it.</p>
+    <section className="card">
+      <div className="empty">
+        {isOwner(session) ? (
+          <>
+            <b>No restaurants yet</b>
+            <span>Load the demo data from Staff to set up the three restaurants, their menus and the logins.</span>
+            <button type="button" className="btn btn-sm" style={{ marginTop: 8 }} onClick={goStaff}>
+              Go to Staff
+            </button>
+          </>
+        ) : (
+          <>
+            <b>No restaurant assigned</b>
+            <span>Your login is not attached to a restaurant yet. Ask a manager to fix it.</span>
+          </>
+        )}
+      </div>
     </section>
   );
 }

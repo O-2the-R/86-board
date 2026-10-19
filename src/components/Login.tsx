@@ -40,13 +40,11 @@ export function Login({ restaurants, onSignedIn }: Props) {
   return (
     <div className="login">
       <div className="login-mark">
-        <div className="eyebrow">Whitfield Hospitality</div>
-        <div className="login-86" aria-hidden="true">
+        <div className="app-icon" aria-hidden="true">
           86
         </div>
-        <h1 className="sr-only">86 Board sign in</h1>
-        <div className="login-rule" aria-hidden="true" />
-        <div className="login-word">Board</div>
+        <h1 className="login-title">86 Board</h1>
+        <p className="login-sub">Whitfield Hospitality</p>
       </div>
 
       <form className="login-form" onSubmit={submit}>
@@ -64,6 +62,7 @@ export function Login({ restaurants, onSignedIn }: Props) {
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
+                placeholder="first.last"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
@@ -112,15 +111,15 @@ export function Login({ restaurants, onSignedIn }: Props) {
           </p>
         )}
 
-        <button type="submit" className="btn btn-ink btn-wide" disabled={busy}>
-          {busy ? 'One moment' : step === 'signIn' ? 'Enter' : 'Save and enter'}
+        <button type="submit" className="btn btn-wide" disabled={busy}>
+          {busy ? 'One moment…' : step === 'signIn' ? 'Sign In' : 'Save and Sign In'}
         </button>
 
         {step === 'signIn' &&
           (api.mode === 'sample' ? (
             <p className="preview-note">Preview with sample data. Sign in as omar, priya.m, marco.r, sam.t or lena.k, any password.</p>
           ) : (
-            <p className="preview-note">Forgotten your password? A manager can reset it.</p>
+            <p className="preview-note">Forgot your password? A manager can reset it.</p>
           ))}
       </form>
 

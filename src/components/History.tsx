@@ -55,71 +55,91 @@ export function History({ restaurantId, refreshKey }: Props) {
     return [...map.entries()];
   }, [events]);
 
-  if (events === null) return <p className="hint center">Loading the history…</p>;
+  if (events === null) return <p className="caption center">Loading the history…</p>;
 
   const maxMs = top[0]?.ms ?? 1;
 
   return (
     <>
       <section className="sec" aria-labelledby="top-heading">
-        <h2 id="top-heading" className="sec-head">
-          Most time eighty-sixed
-        </h2>
-        <div className="sec-sub caps-sm">Last thirty days</div>
+        <div className="sec-head">
+          <h2 id="top-heading" className="sec-title">
+            Most time 86'd
+          </h2>
+          <span className="caption">Last 30 days</span>
+        </div>
         {error && (
-          <p className="error center" role="alert" style={{ marginTop: 10 }}>
+          <p className="error center" role="alert">
             {error}
           </p>
         )}
-        {top.length === 0 ? (
-          <p className="allgood">Nothing was eighty-sixed in the last thirty days.</p>
-        ) : (
-          <ol className="bars">
-            {top.map((t) => (
-              <li key={t.name} className="bar-row">
-                <div className="bar-label">
-                  <span className="bar-name">{t.name}</span>
-                  <span className="bar-val">
-                    {t.count} {t.count === 1 ? 'time' : 'times'} · {fmtDuration(t.ms)}
-                  </span>
-                </div>
-                <div className="bar-track" aria-hidden="true">
-                  <div className="bar-fill" style={{ width: `${Math.max(2, Math.round((t.ms / maxMs) * 100))}%` }} />
-                </div>
-              </li>
-            ))}
-          </ol>
-        )}
+        <div className="card">
+          {top.length === 0 ? (
+            <div className="empty">
+              <span className="empty-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12.5l4.5 4.5L19 7.5" />
+                </svg>
+              </span>
+              <b>Clean month</b>
+              <span>Nothing was eighty-sixed in the last 30 days.</span>
+            </div>
+          ) : (
+            <ol className="bars">
+              {top.map((t) => (
+                <li key={t.name} className="bar-row">
+                  <div className="bar-label">
+                    <span className="bar-name">{t.name}</span>
+                    <span className="bar-val">
+                      {t.count} {t.count === 1 ? 'time' : 'times'} · {fmtDuration(t.ms)}
+                    </span>
+                  </div>
+                  <div className="bar-track" aria-hidden="true">
+                    <div className="bar-fill" style={{ width: `${Math.max(2, Math.round((t.ms / maxMs) * 100))}%` }} />
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
       </section>
 
       {days.length > 0 && (
         <section className="sec" aria-labelledby="log-heading">
-          <h2 id="log-heading" className="sr-only">
-            Log
-          </h2>
+          <div className="sec-head">
+            <h2 id="log-heading" className="sec-title">
+              Log
+            </h2>
+            <span className="caption">
+              {events.length} {events.length === 1 ? 'entry' : 'entries'}
+            </span>
+          </div>
           {days.map(([day, list]) => (
-            <div key={day} className="day">
-              <h3 className="course-head display-caps">{day}</h3>
-              <ul>
-                {list.map((e) => {
-                  const end = e.endedAt ? Date.parse(e.endedAt) : Date.now();
-                  return (
-                    <li key={e.id} className={'log-row' + (e.endedAt ? '' : ' is-open')}>
-                      <div className="log-top">
-                        <span className="log-name">{e.itemName}</span>
-                        <span className="log-time">
-                          {fmtTime(e.startedAt)} to {e.endedAt ? fmtTime(e.endedAt) : 'now'} · {fmtDuration(end - Date.parse(e.startedAt))}
-                        </span>
-                      </div>
-                      {e.note && <div className="log-note">{e.note}</div>}
-                      <div className="log-by">
-                        Marked by {e.markedBy}
-                        {e.clearedBy ? `, back on by ${e.clearedBy}` : ''}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
+            <div key={day} className="group">
+              <h3 className="group-label caption-up">{day}</h3>
+              <div className="card">
+                <ul>
+                  {list.map((e) => {
+                    const end = e.endedAt ? Date.parse(e.endedAt) : Date.now();
+                    return (
+                      <li key={e.id} className={'row' + (e.endedAt ? '' : ' is-open')}>
+                        <div className="row-main">
+                          <span className="row-title">{e.itemName}</span>
+                          {e.note && <span className="row-sub">{e.note}</span>}
+                          <span className="row-meta">
+                            {e.markedBy}
+                            {e.clearedBy ? ` · back on by ${e.clearedBy}` : ''}
+                          </span>
+                        </div>
+                        <div className="row-side">
+                          <span className="log-time">{e.endedAt ? `${fmtTime(e.startedAt)} – ${fmtTime(e.endedAt)}` : `Since ${fmtTime(e.startedAt)}`}</span>
+                          <span className="row-meta">{e.endedAt ? fmtDuration(end - Date.parse(e.startedAt)) : 'Still out'}</span>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             </div>
           ))}
         </section>

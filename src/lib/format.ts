@@ -18,6 +18,15 @@ export function fmtDuration(ms: number): string {
   return rh ? `${d}d ${rh}h` : `${d}d`;
 }
 
+// "Marco Rossi" -> "MR", for the round avatars
+export const initials = (name: string): string =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
+
 // just now, 12s ago, 3m ago
 export function fmtAgo(seconds: number): string {
   if (seconds < 5) return 'just now';

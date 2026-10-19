@@ -1,5 +1,5 @@
-// The line under the restaurant name. Olive when the board is fresh, amber
-// after 10 seconds, oxblood after 30. A stale board must never look live.
+// The line under the restaurant name. Green when the board is fresh, amber
+// after 10 seconds, red after 30. A stale board must never look live.
 import { useEffect, useState } from 'react';
 
 interface Props {
