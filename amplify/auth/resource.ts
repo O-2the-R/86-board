@@ -1,5 +1,4 @@
 import { defineAuth } from '@aws-amplify/backend';
-import { staffAdmin } from '../functions/staff-admin/resource';
 
 // Who can do what is decided by Cognito groups:
 //   owner                 Omar. Every restaurant, every screen.
@@ -19,7 +18,7 @@ export const auth = defineAuth({
     email: true,
   },
   groups: GROUPS,
-  access: (allow) => [
-    allow.resource(staffAdmin).to(['manageUsers', 'manageGroupMembership', 'managePasswordRecovery', 'listUsers', 'listUsersInGroup']),
-  ],
+  // The staff-admin function's permission to manage these logins is granted
+  // in backend.ts, not here: granting it from the auth side creates a
+  // circular dependency between the auth and data stacks.
 });

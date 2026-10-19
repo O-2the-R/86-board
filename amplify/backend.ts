@@ -1,4 +1,6 @@
 import { defineBackend } from '@aws-amplify/backend';
+import { Stack } from 'aws-cdk-lib';
+import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import { AwsCustomResource, AwsCustomResourcePolicy, PhysicalResourceId } from 'aws-cdk-lib/custom-resources';
 import { auth } from './auth/resource';
 import { data } from './data/resource';
@@ -9,6 +11,8 @@ const backend = defineBackend({
   data,
   staffAdmin,
 });
+
+const userPool = backend.auth.resources.userPool;
 
 // ----- Sign in with a username, not an email -----
 // defineAuth only offers email or phone sign-in. The user pool is switched
@@ -32,15 +36,39 @@ cfnUserPoolClient.refreshTokenValidity = 30;
 cfnUserPoolClient.tokenValidityUnits = { accessToken: 'minutes', idToken: 'minutes', refreshToken: 'days' };
 cfnUserPoolClient.enableTokenRevocation = true;
 
+// ----- The staff-admin function may manage logins -----
+// Granted here, on the function's own role (data stack), so the auth stack
+// never has to point back at the data stack.
+const staffAdminLambda = backend.staffAdmin.resources.lambda;
+staffAdminLambda.addToRolePolicy(
+  new PolicyStatement({
+    actions: [
+      'cognito-idp:AdminCreateUser',
+      'cognito-idp:AdminGetUser',
+      'cognito-idp:AdminSetUserPassword',
+      'cognito-idp:AdminAddUserToGroup',
+      'cognito-idp:AdminRemoveUserFromGroup',
+      'cognito-idp:AdminDisableUser',
+      'cognito-idp:AdminEnableUser',
+      'cognito-idp:AdminUserGlobalSignOut',
+      'cognito-idp:AdminListGroupsForUser',
+      'cognito-idp:ListUsers',
+      'cognito-idp:ListUsersInGroup',
+    ],
+    resources: [userPool.userPoolArn],
+  }),
+);
+backend.staffAdmin.addEnvironment('USER_POOL_ID', userPool.userPoolId);
+
 // ----- The first owner account -----
 // Created once, when the backend is first deployed, so there is a way in.
 // Username: omar. The temporary password must be changed at first sign-in.
-const bootstrap = backend.createStack('bootstrap');
-const userPool = backend.auth.resources.userPool;
+// Lives in the function's stack, which already depends on auth.
+const ownerScope = Stack.of(staffAdminLambda);
 const OWNER_USERNAME = 'omar';
 const OWNER_TEMP_PASSWORD = 'Change-Me-86!';
 
-const createOwner = new AwsCustomResource(bootstrap, 'OwnerUser', {
+const createOwner = new AwsCustomResource(ownerScope, 'OwnerUser', {
   onCreate: {
     service: 'CognitoIdentityServiceProvider',
     action: 'adminCreateUser',
@@ -57,7 +85,7 @@ const createOwner = new AwsCustomResource(bootstrap, 'OwnerUser', {
   installLatestAwsSdk: false,
 });
 
-const ownerInGroup = new AwsCustomResource(bootstrap, 'OwnerGroupMembership', {
+const ownerInGroup = new AwsCustomResource(ownerScope, 'OwnerGroupMembership', {
   onCreate: {
     service: 'CognitoIdentityServiceProvider',
     action: 'adminAddUserToGroup',

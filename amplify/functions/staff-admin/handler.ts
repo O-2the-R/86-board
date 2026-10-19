@@ -36,7 +36,8 @@ Amplify.configure(resourceConfig, libraryOptions);
 
 const client = generateClient<Schema>();
 const cognito = new CognitoIdentityProviderClient();
-const USER_POOL_ID = env.AMPLIFY_AUTH_USERPOOL_ID;
+// Set in backend.ts alongside the Cognito permissions.
+const USER_POOL_ID = process.env.USER_POOL_ID ?? '';
 
 const ROLES: SeedRole[] = ['manager', 'kitchen', 'server', 'host'];
 const RESTAURANT_IDS = RESTAURANTS.map((r) => r.id);
