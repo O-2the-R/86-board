@@ -4,6 +4,9 @@ A live board for restaurant staff: what is 86'd, since when, and why.
 Managers and kitchen update it. Servers and hosts see it. Every change is
 kept as history.
 
+Live: https://main.d2w35vo1xnmx2i.amplifyapp.com
+(AWS Amplify Hosting, Ohio region. Every push to `main` goes live in about three minutes.)
+
 ## Where things are
 
 | File | What it does |
