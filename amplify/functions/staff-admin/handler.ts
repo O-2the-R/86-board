@@ -9,6 +9,7 @@ import { generateClient } from 'aws-amplify/data';
 import {
   AdminAddUserToGroupCommand,
   AdminCreateUserCommand,
+  AdminDeleteUserCommand,
   AdminDisableUserCommand,
   AdminEnableUserCommand,
   AdminGetUserCommand,
@@ -185,6 +186,27 @@ async function manageStaff(actor: Actor, args: ManageArgs) {
     const res = await client.models.Staff.update({ id: username, lastChangedBy: by });
     firstError(res, 'Saving the staff record');
     return { ok: true, username, temporaryPassword: password };
+  }
+
+  // Only a login nobody ever used can be removed. Anyone who has signed in
+  // may be on the history, so their record stays and they get switched off.
+  if (args.action === 'remove') {
+    if (username === actor.username) throw new Refused('You cannot remove your own account.');
+    if (person.active) throw new Refused('Switch the login off first, then remove it.');
+    let status: string | undefined;
+    try {
+      const u = await cognito.send(new AdminGetUserCommand({ UserPoolId: USER_POOL_ID, Username: username }));
+      status = u.UserStatus;
+    } catch (e) {
+      if (!(e instanceof UserNotFoundException)) throw e;
+    }
+    if (status && status !== 'FORCE_CHANGE_PASSWORD') {
+      throw new Refused(`${person.displayName} has signed in before, so their record stays. Leave them switched off.`);
+    }
+    if (status) await cognito.send(new AdminDeleteUserCommand({ UserPoolId: USER_POOL_ID, Username: username }));
+    const res = await client.models.Staff.delete({ id: username });
+    firstError(res, 'Removing the staff record');
+    return { ok: true, username, removed: true };
   }
 
   throw new Refused(`Unknown action ${args.action}.`);

@@ -209,6 +209,12 @@ export const mockApi: BoardApi = {
     }
     const p = store.staff.find((s) => s.username === username);
     if (!p) throw new Error(`No staff record for ${username}.`);
+    if (input.action === 'remove') {
+      if (p.active) throw new Error('Switch the login off first, then remove it.');
+      store.staff = store.staff.filter((s) => s.username !== username);
+      save(store);
+      return { ok: true, username, removed: true };
+    }
     if (input.action === 'deactivate') p.active = false;
     if (input.action === 'reactivate') p.active = true;
     save(store);

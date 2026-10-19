@@ -1,6 +1,6 @@
 import type { EightySixEvent, MenuItem, Restaurant, Session, Staff, StaffRole } from '../types';
 
-export type ManageAction = 'create' | 'deactivate' | 'reactivate' | 'resetPassword';
+export type ManageAction = 'create' | 'deactivate' | 'reactivate' | 'resetPassword' | 'remove';
 
 export interface ManageStaffInput {
   action: ManageAction;
@@ -17,6 +17,7 @@ export interface ManageStaffResult {
   temporaryPassword?: string;
   passwordSet?: boolean; // a chosen password was set for good
   active?: boolean;
+  removed?: boolean;
 }
 
 export interface SeedResult {

@@ -64,6 +64,7 @@ export function Staff({ session, restaurants, onDataChanged }: Props) {
     try {
       const res = await api.manageStaff({ action, username: p.username });
       if (action === 'resetPassword') setNotice({ title: `Temporary password for ${p.displayName}. They will choose their own at next sign-in.`, password: res.temporaryPassword });
+      if (action === 'remove') setNotice({ title: `${p.displayName} (${p.username}) was removed. The login was never used, so nothing in the history refers to it.` });
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'That did not save.');
@@ -176,9 +177,13 @@ export function Staff({ session, restaurants, onDataChanged }: Props) {
                   </div>
                   {canAct && (
                     <div className="staff-actions">
-                      {p.active && (
+                      {p.active ? (
                         <button type="button" className="btn btn-sm btn-text" disabled={busy === p.username} onClick={() => act(p, 'resetPassword')}>
                           Reset password
+                        </button>
+                      ) : (
+                        <button type="button" className="btn btn-sm btn-text" disabled={busy === p.username} onClick={() => act(p, 'remove')} title="Only for a login that was never used">
+                          Remove
                         </button>
                       )}
                       <button

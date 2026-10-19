@@ -44,6 +44,7 @@ staffAdminLambda.addToRolePolicy(
   new PolicyStatement({
     actions: [
       'cognito-idp:AdminCreateUser',
+      'cognito-idp:AdminDeleteUser',
       'cognito-idp:AdminGetUser',
       'cognito-idp:AdminSetUserPassword',
       'cognito-idp:AdminAddUserToGroup',
