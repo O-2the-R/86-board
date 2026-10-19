@@ -305,16 +305,27 @@ async function seedDemo(actor: Actor, args: SeedArgs) {
 
 // ---------- entry ----------
 
+// The API does not always pass event.info, so the operation is told apart
+// by its arguments: seedDemo has `confirm`, manageStaff has `action`.
+function operationOf(event: AppSyncResolverEvent<ManageArgs | SeedArgs>): 'manageStaff' | 'seedDemo' | 'unknown' {
+  const named = (event as { info?: { fieldName?: string } }).info?.fieldName;
+  if (named === 'manageStaff' || named === 'seedDemo') return named;
+  const args = (event.arguments ?? {}) as Partial<ManageArgs & SeedArgs>;
+  if (typeof args.action === 'string') return 'manageStaff';
+  if (typeof args.confirm === 'string') return 'seedDemo';
+  return 'unknown';
+}
+
 export const handler = async (event: AppSyncResolverEvent<ManageArgs | SeedArgs>) => {
   const actor = actorFrom(event);
   try {
-    switch (event.info.fieldName) {
+    switch (operationOf(event)) {
       case 'manageStaff':
         return await manageStaff(actor, event.arguments as ManageArgs);
       case 'seedDemo':
         return await seedDemo(actor, event.arguments as SeedArgs);
       default:
-        throw new Refused(`Unknown operation ${event.info.fieldName}.`);
+        throw new Refused('Unknown operation.');
     }
   } catch (e) {
     if (e instanceof Refused) throw e;
