@@ -31,8 +31,11 @@ const cognito = new CognitoIdentityProviderClient();
 // Set in backend.ts alongside the Cognito permissions.
 const USER_POOL_ID = process.env.USER_POOL_ID ?? '';
 
-const DEMO_PASSWORD = 'Welcome86!'; // every sample staff account; the owner's is set separately
 const HOUR = 3_600_000;
+
+// Every sample staff account gets the same password, made fresh each time the
+// demo data is loaded and shown once on the Staff screen. Never in the code.
+const demoPassword = () => `Welcome-${1000 + Math.floor(Math.random() * 9000)}!`;
 
 interface ManageArgs {
   action: string;
@@ -196,6 +199,7 @@ async function seedDemo(actor: Actor, args: SeedArgs) {
   const now = Date.now();
   const ago = (hours: number) => new Date(now - hours * HOUR).toISOString();
   const counts = { restaurants: 0, items: 0, events: 0, staff: 0 };
+  const DEMO_PASSWORD = demoPassword();
 
   // Restaurants
   for (const [i, r] of RESTAURANTS.entries()) {

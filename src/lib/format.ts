@@ -1,7 +1,9 @@
 // Small helpers that turn times into the words staff actually read.
 
-const timeFmt = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
-const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+// Always US English, whatever language the phone is set to: the board is
+// read by a whole team, and "čt 22. 10." helps nobody at the pass.
+const timeFmt = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' });
+const dayFmt = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
 export const fmtTime = (iso: string): string => timeFmt.format(new Date(iso));
 export const fmtDay = (iso: string): string => dayFmt.format(new Date(iso));

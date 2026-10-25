@@ -101,42 +101,49 @@ const reportUrl = pushLambda.addFunctionUrl({
 backend.addOutput({ custom: { reportUrl: reportUrl.url } });
 
 // ----- The first owner account -----
-// Created once, when the backend is first deployed, so there is a way in.
-// Username: omar. The temporary password must be changed at first sign-in.
+// On a brand-new deployment there is no way in until an owner exists. Set
+// OWNER_TEMP_PASSWORD (and optionally OWNER_USERNAME, default omar) as an
+// environment variable on the Amplify app before the first deploy, and this
+// creates the owner with that temporary password, to be changed at first
+// sign-in. Without the variable nothing is created, which is the normal
+// state once the owner exists. The password never lives in the code.
 // Lives in the function's stack, which already depends on auth.
-const ownerScope = Stack.of(staffAdminLambda);
-const OWNER_USERNAME = 'omar';
-const OWNER_TEMP_PASSWORD = 'Change-Me-86!';
+const OWNER_TEMP_PASSWORD = process.env.OWNER_TEMP_PASSWORD;
+if (OWNER_TEMP_PASSWORD) {
+  const ownerScope = Stack.of(staffAdminLambda);
+  const OWNER_USERNAME = process.env.OWNER_USERNAME || 'omar';
 
-const createOwner = new AwsCustomResource(ownerScope, 'OwnerUser', {
-  onCreate: {
-    service: 'CognitoIdentityServiceProvider',
-    action: 'adminCreateUser',
-    parameters: {
-      UserPoolId: userPool.userPoolId,
-      Username: OWNER_USERNAME,
-      TemporaryPassword: OWNER_TEMP_PASSWORD,
-      MessageAction: 'SUPPRESS',
-      UserAttributes: [{ Name: 'name', Value: 'Omar' }],
+  const createOwner = new AwsCustomResource(ownerScope, 'OwnerUser', {
+    onCreate: {
+      service: 'CognitoIdentityServiceProvider',
+      action: 'adminCreateUser',
+      parameters: {
+        UserPoolId: userPool.userPoolId,
+        Username: OWNER_USERNAME,
+        TemporaryPassword: OWNER_TEMP_PASSWORD,
+        MessageAction: 'SUPPRESS',
+        UserAttributes: [{ Name: 'name', Value: 'Omar' }],
+      },
+      physicalResourceId: PhysicalResourceId.of(`owner-${OWNER_USERNAME}`),
+      ignoreErrorCodesMatching: 'UsernameExistsException', // already there: fine
     },
-    physicalResourceId: PhysicalResourceId.of(`owner-${OWNER_USERNAME}`),
-  },
-  policy: AwsCustomResourcePolicy.fromSdkCalls({ resources: [userPool.userPoolArn] }),
-  installLatestAwsSdk: false,
-});
+    policy: AwsCustomResourcePolicy.fromSdkCalls({ resources: [userPool.userPoolArn] }),
+    installLatestAwsSdk: false,
+  });
 
-const ownerInGroup = new AwsCustomResource(ownerScope, 'OwnerGroupMembership', {
-  onCreate: {
-    service: 'CognitoIdentityServiceProvider',
-    action: 'adminAddUserToGroup',
-    parameters: {
-      UserPoolId: userPool.userPoolId,
-      Username: OWNER_USERNAME,
-      GroupName: 'owner',
+  const ownerInGroup = new AwsCustomResource(ownerScope, 'OwnerGroupMembership', {
+    onCreate: {
+      service: 'CognitoIdentityServiceProvider',
+      action: 'adminAddUserToGroup',
+      parameters: {
+        UserPoolId: userPool.userPoolId,
+        Username: OWNER_USERNAME,
+        GroupName: 'owner',
+      },
+      physicalResourceId: PhysicalResourceId.of(`owner-group-${OWNER_USERNAME}`),
     },
-    physicalResourceId: PhysicalResourceId.of(`owner-group-${OWNER_USERNAME}`),
-  },
-  policy: AwsCustomResourcePolicy.fromSdkCalls({ resources: [userPool.userPoolArn] }),
-  installLatestAwsSdk: false,
-});
-ownerInGroup.node.addDependency(createOwner);
+    policy: AwsCustomResourcePolicy.fromSdkCalls({ resources: [userPool.userPoolArn] }),
+    installLatestAwsSdk: false,
+  });
+  ownerInGroup.node.addDependency(createOwner);
+}

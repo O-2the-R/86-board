@@ -21,7 +21,7 @@
     },
     {
       "parameters": {
-        "sendTo": "osjmohamad@gmail.com",
+        "sendTo": "YOUR_EMAIL@example.com",
         "subject": "={{ $json.body.subject }}",
         "emailType": "html",
         "message": "={{ $json.body.html }}",
@@ -46,7 +46,7 @@
         "documentId": {
           "__rl": true,
           "mode": "id",
-          "value": "1M6KFwmJWBaO_jVn8xvrpjaGMNrRv3mK_1xliyaJ7jaM"
+          "value": "YOUR_GOOGLE_SHEET_ID"
         },
         "sheetName": {
           "__rl": true,

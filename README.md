@@ -38,12 +38,16 @@ returns it.
 
 ## First sign-in (owner)
 
-1. Open the live URL. Username `omar`, temporary password `Change-Me-86!`.
-   The app asks for a new password before letting you in.
+1. Before the first deploy of a new environment, set `OWNER_TEMP_PASSWORD`
+   as an environment variable on the Amplify app (App settings, Environment
+   variables). The deploy creates the owner login `omar` with it. Open the
+   live URL and sign in; the app asks for a new password before letting you
+   in. Remove the variable afterwards. (The live app already has its owner.)
 2. The board is empty. Go to Staff and press "Load demo data". This creates
-   the three restaurants, their menus, a week of history and 60 staff logins.
-3. Every sample staff login uses the password `Welcome86!`. Try `priya.m`
-   (manager, Main Street) and `sam.t` (server, Main Street) in a private window.
+   the three restaurants, their menus, a week of history and 60 staff logins,
+   and shows the one password they all share, once.
+3. Try `priya.m` (manager, Main Street) and `sam.t` (server, Main Street) in a
+   private window.
 
 ## Adding people
 
@@ -71,6 +75,10 @@ How it works: `public/sw.js` is the service worker that shows the notification.
 `amplify/functions/push/` keeps one row per phone and, fed by the menu table's
 change stream, sends the push. The signing keys are created on first use and
 stored in the `PushKey` table, so nothing is configured by hand.
+
+The n8n workflow files in `n8n/` carry placeholders (`YOUR_EMAIL@example.com`,
+`YOUR_REPORT_LINK`, `YOUR_GOOGLE_SHEET_ID`); the filled-in copies live with the
+person who runs them, not in the repo.
 
 ## Where things are
 

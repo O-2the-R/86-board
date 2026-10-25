@@ -23,7 +23,7 @@
     },
     {
       "parameters": {
-        "url": "https://7ppgejfucodcaosop4iqdsnkva0gegdy.lambda-url.us-east-2.on.aws/report",
+        "url": "YOUR_REPORT_LINK",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {
@@ -41,7 +41,7 @@
     },
     {
       "parameters": {
-        "sendTo": "osjmohamad@gmail.com",
+        "sendTo": "YOUR_EMAIL@example.com",
         "subject": "={{ $json.subject }}",
         "emailType": "html",
         "message": "={{ $json.html }}",
@@ -79,7 +79,7 @@
         "documentId": {
           "__rl": true,
           "mode": "id",
-          "value": "1M6KFwmJWBaO_jVn8xvrpjaGMNrRv3mK_1xliyaJ7jaM"
+          "value": "YOUR_GOOGLE_SHEET_ID"
         },
         "sheetName": {
           "__rl": true,

@@ -1,5 +1,6 @@
-// The line under the restaurant name. Green when the board is fresh, amber
-// after 10 seconds, red after 30. A stale board must never look live.
+// The line under the restaurant name. "Live" while the board is fresh,
+// amber with a clock after 10 seconds, red after 30. A stale board must
+// never look live.
 import { useEffect, useState } from 'react';
 
 interface Props {
@@ -37,12 +38,15 @@ export function Freshness({ lastOk, failing }: Props) {
 
   const seconds = Math.floor((Date.now() - lastOk) / 1000);
   const level = seconds > 30 ? 'bad' : seconds > 10 || failing ? 'warn' : 'ok';
+  // Fresh is just "Live". The clock only starts when something is wrong.
   const text =
     level === 'bad'
       ? `Stale. Last update ${agoWords(seconds)}. Check the Wi-Fi.`
       : failing
         ? `Retrying. Last update ${agoWords(seconds)}.`
-        : `Updated ${agoWords(seconds)}`;
+        : level === 'warn'
+          ? `Last update ${agoWords(seconds)}`
+          : 'Live';
 
   return (
     <span className={'fresh' + (level === 'bad' ? ' fresh-bad' : level === 'warn' ? ' fresh-warn' : '')} role="status">
