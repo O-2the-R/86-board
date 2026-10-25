@@ -1158,11 +1158,45 @@ button.row:active {
   flex-wrap: wrap;
 }
 
-.notice-line {
+.notice-line,
+.copy-text {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+}
+
+.copy-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.copy-val {
+  font-family: var(--mono);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.form-intro {
+  font-size: 15px;
+  color: var(--fg-2);
+  text-wrap: pretty;
+}
+
+.actions-left {
+  justify-content: flex-start;
+}
+
+.ok-text {
+  color: var(--sage);
+}
+
+.bad-text {
+  color: var(--red);
 }
 
 .notice-pass {

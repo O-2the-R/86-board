@@ -1,7 +1,7 @@
 import { defineBackend } from '@aws-amplify/backend';
 import { Stack } from 'aws-cdk-lib';
 import { Effect, Policy, PolicyStatement } from 'aws-cdk-lib/aws-iam';
-import { EventSourceMapping, StartingPosition } from 'aws-cdk-lib/aws-lambda';
+import { EventSourceMapping, FunctionUrlAuthType, HttpMethod, StartingPosition } from 'aws-cdk-lib/aws-lambda';
 import { AwsCustomResource, AwsCustomResourcePolicy, PhysicalResourceId } from 'aws-cdk-lib/custom-resources';
 import { auth } from './auth/resource';
 import { data } from './data/resource';
@@ -87,6 +87,16 @@ const streamMapping = new EventSourceMapping(Stack.of(menuItemTable), 'PushMenuI
   retryAttempts: 2,
 });
 streamMapping.node.addDependency(streamPolicy);
+
+// ----- The report link for n8n -----
+// A plain web address on the push function. n8n calls it every morning with
+// the key from the Automations screen and gets yesterday's 86s as JSON. The
+// function checks the key itself, so the address needs no AWS sign-in.
+const reportUrl = pushLambda.addFunctionUrl({
+  authType: FunctionUrlAuthType.NONE,
+  cors: { allowedOrigins: ['*'], allowedMethods: [HttpMethod.GET], allowedHeaders: ['x-86-key', 'content-type'] },
+});
+backend.addOutput({ custom: { reportUrl: reportUrl.url } });
 
 // ----- The first owner account -----
 // Created once, when the backend is first deployed, so there is a way in.

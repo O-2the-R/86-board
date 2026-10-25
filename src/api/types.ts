@@ -39,6 +39,15 @@ export interface PushSubscriptionInput {
   device: string; // "iPhone", "Android", ... for the staff screen later
 }
 
+// The owner's n8n settings. One row; the key is made in the app.
+export interface IntegrationSettings {
+  webhookUrl: string; // where every 86 is sent; empty until the owner pastes it
+  key: string; // sent with every note, and required on the report link
+  reportUrl: string | null; // the morning-report address, null in the preview
+  lastTestAt?: string;
+  lastTestResult?: string;
+}
+
 // The "data drawer". The screens only talk to this.
 // Sample mode fills it from the browser (mock.ts); the real app from AWS (aws.ts).
 export interface BoardApi {
@@ -71,4 +80,9 @@ export interface BoardApi {
   pushPublicKey(): Promise<string | null>;
   subscribePush(sub: PushSubscriptionInput): Promise<void>;
   unsubscribePush(endpoint: string): Promise<void>;
+
+  // automations (owner only)
+  getIntegration(): Promise<IntegrationSettings>;
+  saveIntegration(webhookUrl: string, key: string): Promise<IntegrationSettings>;
+  testWebhook(): Promise<{ ok: boolean; summary: string }>;
 }

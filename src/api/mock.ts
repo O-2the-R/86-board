@@ -1,7 +1,8 @@
 // Sample mode. Everything lives in this browser's storage, so the app can be
 // tried anywhere without a backend. Sign in as any sample person (omar,
 // priya.m, marco.r, sam.t, lena.k ...) with any password.
-import type { BoardApi, ManageStaffInput, ManageStaffResult, SeedResult, SignInResult } from './types';
+import type { BoardApi, IntegrationSettings, ManageStaffInput, ManageStaffResult, SeedResult, SignInResult } from './types';
+import { newKey } from '../lib/random';
 import type { EightySixEvent, MenuItem, Restaurant, Session, Staff } from '../types';
 import { readJSON, removeKey, writeJSON } from '../lib/storage';
 import { CLOSED_SEEDS, LOW_SEEDS, MENUS, OPEN_SEEDS, RESTAURANTS, STAFF, itemIdFor } from '../../shared/sample-data';
@@ -271,4 +272,32 @@ export const mockApi: BoardApi = {
     throw new Error('Alerts work in the real app, not in this preview.');
   },
   async unsubscribePush() {},
+
+  // The owner's n8n settings live in this browser in the preview.
+  async getIntegration(): Promise<IntegrationSettings> {
+    await wait(60);
+    const saved = readJSON<IntegrationSettings>(INTEGRATION_KEY);
+    if (saved) return saved;
+    const fresh: IntegrationSettings = { webhookUrl: '', key: newKey(), reportUrl: null };
+    writeJSON(INTEGRATION_KEY, fresh);
+    return fresh;
+  },
+
+  async saveIntegration(webhookUrl, key) {
+    await wait(120);
+    const prev = readJSON<IntegrationSettings>(INTEGRATION_KEY);
+    const next: IntegrationSettings = { ...(prev ?? { reportUrl: null }), webhookUrl: webhookUrl.trim(), key, reportUrl: null };
+    writeJSON(INTEGRATION_KEY, next);
+    return next;
+  },
+
+  async testWebhook() {
+    await wait(300);
+    const summary = 'Preview only. On the real site this sends a sample 86 to your n8n.';
+    const prev = readJSON<IntegrationSettings>(INTEGRATION_KEY);
+    if (prev) writeJSON(INTEGRATION_KEY, { ...prev, lastTestAt: new Date().toISOString(), lastTestResult: summary });
+    return { ok: false, summary };
+  },
 };
+
+const INTEGRATION_KEY = 'eightysix.sample.integration';

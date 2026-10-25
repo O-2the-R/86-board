@@ -7,6 +7,8 @@ import { ROLE_LABEL, STAFF_ROLES, isOwner } from '../types';
 import { api } from '../api';
 import type { ManageAction } from '../api/types';
 import { initials } from '../lib/format';
+import { CopyLine } from './CopyLine';
+import { Automations } from './Automations';
 import { usernameFor } from '../../shared/sample-data';
 
 interface Props {
@@ -151,8 +153,8 @@ export function Staff({ session, restaurants, onDataChanged }: Props) {
                 Dismiss
               </button>
             </div>
-            {notice.username && <CopyLine label="Username" value={notice.username} />}
-            {notice.password && <CopyLine label="Password" value={notice.password} />}
+            {notice.username && <CopyLine label="Username" value={notice.username} big />}
+            {notice.password && <CopyLine label="Password" value={notice.password} big />}
           </div>
         )}
 
@@ -214,6 +216,8 @@ export function Staff({ session, restaurants, onDataChanged }: Props) {
           </ul>
         </section>
       ))}
+
+      {owner && <Automations />}
 
       {selected && (
         <PersonSheet
@@ -298,32 +302,6 @@ function PersonSheet({
           Cancel
         </button>
       </div>
-    </div>
-  );
-}
-
-// One line of the notice that the manager reads out or copies: a label,
-// the value in big monospace, and a Copy button.
-function CopyLine({ label, value }: { label: string; value: string }) {
-  const [copied, setCopied] = useState(false);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // the text is selectable; the person can copy it by hand
-    }
-  }
-  return (
-    <div className="notice-row">
-      <span className="notice-line">
-        <span className="caption">{label}</span>
-        <span className="notice-pass">{value}</span>
-      </span>
-      <button type="button" className="btn btn-sm btn-outline" onClick={copy}>
-        {copied ? 'Copied' : 'Copy'}
-      </button>
     </div>
   );
 }

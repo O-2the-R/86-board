@@ -146,6 +146,26 @@ const schema = a
       .returns(a.json())
       .authorization((allow) => [allow.authenticated()])
       .handler(a.handler.function(push)),
+
+    // ----- Automations (n8n) -----
+    // One row, id 'n8n': where to send a note on every 86, and the key that
+    // proves the note came from us (and that a report request came from n8n).
+    Integration: a
+      .model({
+        webhookUrl: a.string(),
+        key: a.string().required(),
+        lastTestAt: a.datetime(),
+        lastTestResult: a.string(),
+      })
+      .authorization((allow) => [allow.group('owner')]),
+
+    // Owner only. Sends a sample 86 to the webhook and reports what came back.
+    testWebhook: a
+      .mutation()
+      .arguments({ test: a.string().required() })
+      .returns(a.json())
+      .authorization((allow) => [allow.group('owner')])
+      .handler(a.handler.function(push)),
   })
   .authorization((allow) => [allow.resource(staffAdmin), allow.resource(push)]);
 

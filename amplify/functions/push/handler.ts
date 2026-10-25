@@ -216,32 +216,285 @@ async function send(restaurantId: string, message: Message) {
 async function onStream(event: DynamoDBStreamEvent) {
   for (const record of event.Records) {
     if (record.eventName !== 'MODIFY') continue;
-    const change = await messageFor(record.dynamodb?.OldImage as Image | undefined, record.dynamodb?.NewImage as Image | undefined);
+    const oldImg = record.dynamodb?.OldImage as Image | undefined;
+    const newImg = record.dynamodb?.NewImage as Image | undefined;
+    const change = await messageFor(oldImg, newImg);
     if (!change) continue;
     try {
       await send(change.restaurantId, change.message);
     } catch (e) {
       console.error('push: could not send', e instanceof Error ? e.message : e);
     }
+    // A fresh 86 also goes to n8n, which emails it and logs it in the sheet.
+    if (str(newImg, 'status') === 'out' && str(oldImg, 'status') !== 'out') {
+      try {
+        await notifyWebhook(await alertPayload(newImg!, false));
+      } catch (e) {
+        console.error('webhook: could not send', e instanceof Error ? e.message : e);
+      }
+    }
   }
   return { batchItemFailures: [] };
 }
 
+// ---------- n8n: the note on every 86 ----------
+
+const TZ = 'America/New_York';
+const INTEGRATION_ID = 'n8n';
+
+const fmtDate = (iso: string) => new Intl.DateTimeFormat('en-US', { timeZone: TZ, month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(iso));
+const fmtTime = (iso: string) => new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
+const fmtLong = (iso: string) => new Intl.DateTimeFormat('en-US', { timeZone: TZ, weekday: 'long', month: 'short', day: 'numeric' }).format(new Date(iso));
+
+function fmtDuration(ms: number): string {
+  const mins = Math.max(0, Math.round(ms / 60_000));
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h < 24) return m ? `${h}h ${m}m` : `${h}h`;
+  const d = Math.floor(h / 24);
+  const rh = h % 24;
+  return rh ? `${d}d ${rh}h` : `${d}d`;
+}
+
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+async function integration() {
+  const got = await client.models.Integration.get({ id: INTEGRATION_ID });
+  firstError(got, 'Reading the automation settings');
+  return got.data;
+}
+
+// Everything n8n needs in one flat object: a subject and an HTML body ready
+// for the Gmail node, and plain fields ready for one sheet row.
+async function alertPayload(img: Image, test: boolean) {
+  const item = str(img, 'name') ?? 'An item';
+  const restaurantId = str(img, 'restaurantId') ?? '';
+  const restaurant = await restaurantName(restaurantId);
+  const at = str(img, 'outSince') ?? new Date().toISOString();
+  const note = str(img, 'note') ?? '';
+  const by = str(img, 'markedBy') ?? '';
+  const category = str(img, 'category') ?? '';
+  const vendor = str(img, 'vendor') ?? '';
+  const subject = `${test ? '[Test] ' : ''}86'd at ${restaurant}: ${item}`;
+  const html =
+    `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:16px;color:#1d1a16">` +
+    `<p style="margin:0 0 6px;font-size:13px;color:#6f685f">${esc(restaurant)} · ${esc(fmtLong(at))}, ${esc(fmtTime(at))}</p>` +
+    `<p style="margin:0 0 12px;font-size:24px;font-weight:700"><span style="color:#d8382a">86'd</span> ${esc(item)}</p>` +
+    (note ? `<p style="margin:0 0 6px">${esc(note)}</p>` : '') +
+    (by ? `<p style="margin:0;color:#6f685f">Marked by ${esc(by)}</p>` : '') +
+    (vendor ? `<p style="margin:12px 0 0;font-size:13px;color:#6f685f">Vendor: ${esc(vendor)}</p>` : '') +
+    (test ? `<p style="margin:16px 0 0;font-size:13px;color:#6f685f">This is a test from the 86 Board Automations screen.</p>` : '') +
+    `</div>`;
+  return {
+    kind: '86',
+    test,
+    restaurant,
+    restaurantId,
+    item,
+    category,
+    vendor,
+    note,
+    by,
+    at,
+    date: fmtDate(at),
+    time: fmtTime(at),
+    subject,
+    html,
+  };
+}
+
+async function notifyWebhook(payload: Record<string, unknown>): Promise<{ ok: boolean; status: number; detail?: string }> {
+  const cfg = await integration();
+  if (!cfg?.webhookUrl) return { ok: false, status: 0, detail: 'No n8n address saved yet.' };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(cfg.webhookUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-86-key': cfg.key },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    const text = (await res.text()).slice(0, 200);
+    console.log(`webhook: ${payload.subject as string} -> ${res.status}`);
+    return { ok: res.ok, status: res.status, detail: res.ok ? undefined : text };
+  } catch (e) {
+    return { ok: false, status: 0, detail: e instanceof Error ? e.message : 'Could not reach n8n.' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function testWebhook(actor: Actor) {
+  if (actor.restaurantId !== 'all') throw new Refused('Owner only.');
+  const sample: Image = {
+    name: { S: 'Pan-Roasted Halibut' },
+    restaurantId: { S: 'main' },
+    outSince: { S: new Date().toISOString() },
+    note: { S: 'Test from the Automations screen' },
+    markedBy: { S: actor.username },
+    category: { S: 'Mains' },
+    vendor: { S: 'Chesapeake Seafood Co.' },
+  };
+  const result = await notifyWebhook(await alertPayload(sample, true));
+  const summary = result.ok ? `OK (${result.status})` : `Failed${result.status ? ` (${result.status})` : ''}: ${result.detail ?? ''}`.trim();
+  const saved = await client.models.Integration.update({ id: INTEGRATION_ID, lastTestAt: new Date().toISOString(), lastTestResult: summary });
+  firstError(saved, 'Saving the test result');
+  return { ...result, summary };
+}
+
+// ---------- n8n: the morning report ----------
+
+// "Yesterday" in restaurant time, as YYYY-MM-DD.
+function yesterdayIn(tz: string): string {
+  const now = new Date();
+  const local = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+  const [y, m, d] = local.split('-').map(Number);
+  const prev = new Date(Date.UTC(y, m - 1, d - 1));
+  return prev.toISOString().slice(0, 10);
+}
+
+// The instant a local calendar day starts, found by asking the formatter what
+// local time a candidate instant is and correcting. Handles DST days.
+function startOfDay(y: number, m: number, d: number, tz: string): number {
+  let t = Date.UTC(y, m - 1, d, 0);
+  for (let i = 0; i < 3; i++) {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hour12: false, year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(new Date(t));
+    const get = (k: string) => Number(parts.find((p) => p.type === k)?.value);
+    const localHour = get('hour') % 24;
+    const dayDiff = Math.round((Date.UTC(get('year'), get('month') - 1, get('day')) - Date.UTC(y, m - 1, d)) / 86_400_000);
+    const diffHours = dayDiff * 24 + localHour;
+    if (diffHours === 0) break;
+    t -= diffHours * 3_600_000;
+  }
+  return t;
+}
+
+// The UTC start and end of a local calendar day (end = start of the next day,
+// so a 23- or 25-hour DST day is still covered exactly).
+function dayBounds(ymd: string, tz: string): { start: string; end: string } {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const next = new Date(Date.UTC(y, m - 1, d + 1));
+  const start = startOfDay(y, m, d, tz);
+  const end = startOfDay(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), tz);
+  return { start: new Date(start).toISOString(), end: new Date(end).toISOString() };
+}
+
+interface ReportRow {
+  date: string;
+  restaurant: string;
+  item: string;
+  note: string;
+  by: string;
+  outAt: string;
+  backAt: string;
+  backBy: string;
+  outFor: string;
+  stillOut: boolean;
+}
+
+async function report(ymd: string) {
+  const { start, end } = dayBounds(ymd, TZ);
+  const restaurants = await client.models.Restaurant.list({ limit: 50 });
+  firstError(restaurants, 'Listing restaurants');
+  const sorted = restaurants.data.slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  const now = Date.now();
+  const groups: { name: string; count: number; items: ReportRow[] }[] = [];
+  for (const r of sorted) {
+    const res = await client.models.EightySixEvent.listEightySixEventByRestaurantIdAndStartedAt(
+      { restaurantId: r.id, startedAt: { between: [start, end] } },
+      { limit: 500 },
+    );
+    firstError(res, `Reading history for ${r.name}`);
+    const items: ReportRow[] = res.data
+      .slice()
+      .sort((a, b) => a.startedAt.localeCompare(b.startedAt))
+      .map((e) => ({
+        date: fmtDate(e.startedAt),
+        restaurant: r.name,
+        item: e.itemName,
+        note: e.note ?? '',
+        by: e.markedBy,
+        outAt: fmtTime(e.startedAt),
+        backAt: e.endedAt ? fmtTime(e.endedAt) : '',
+        backBy: e.clearedBy ?? '',
+        outFor: fmtDuration((e.endedAt ? Date.parse(e.endedAt) : now) - Date.parse(e.startedAt)),
+        stillOut: !e.endedAt,
+      }));
+    groups.push({ name: r.name, count: items.length, items });
+  }
+  const rows = groups.flatMap((g) => g.items);
+  const label = fmtLong(`${ymd}T12:00:00Z`);
+  const subject = rows.length === 0 ? `86 Board: nothing was 86'd ${label}` : `86 Board: ${rows.length} ${rows.length === 1 ? 'item' : 'items'} 86'd ${label}`;
+  const html =
+    `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:16px;color:#1d1a16">` +
+    `<p style="margin:0 0 4px;font-size:13px;color:#6f685f">86 Board, daily digest</p>` +
+    `<p style="margin:0 0 16px;font-size:22px;font-weight:700">${esc(label)}: ${rows.length === 0 ? "nothing was 86'd" : `${rows.length} ${rows.length === 1 ? 'item' : 'items'} 86'd`}</p>` +
+    groups
+      .map(
+        (g) =>
+          `<p style="margin:14px 0 6px;font-size:13px;font-weight:700;color:#b8780f;text-transform:uppercase;letter-spacing:.04em">${esc(g.name)} · ${g.count}</p>` +
+          (g.items.length === 0
+            ? `<p style="margin:0;color:#6f685f">Nothing 86'd.</p>`
+            : `<table style="border-collapse:collapse;width:100%;max-width:560px">` +
+              g.items
+                .map(
+                  (i) =>
+                    `<tr><td style="padding:6px 8px 6px 0;border-bottom:1px solid #e6e1d8;vertical-align:top"><b>${esc(i.item)}</b>${i.note ? `<br><span style="color:#6f685f">${esc(i.note)}</span>` : ''}<br><span style="font-size:13px;color:#6f685f">${esc(i.by)}${i.backBy ? `, back on by ${esc(i.backBy)}` : ''}</span></td>` +
+                    `<td style="padding:6px 0;border-bottom:1px solid #e6e1d8;text-align:right;white-space:nowrap;vertical-align:top">${esc(i.outAt)}${i.backAt ? ` – ${esc(i.backAt)}` : ''}<br><span style="font-size:13px;color:${i.stillOut ? '#d8382a' : '#6f685f'}">${i.stillOut ? 'still out' : esc(i.outFor)}</span></td></tr>`,
+                )
+                .join('') +
+              `</table>`),
+      )
+      .join('') +
+    `</div>`;
+  return { date: ymd, label, total: rows.length, restaurants: groups, rows, subject, html };
+}
+
+// The Function URL. GET /report?date=YYYY-MM-DD (default: yesterday), with
+// the Automations key in the x-86-key header.
+interface UrlEvent {
+  rawPath: string;
+  headers: Record<string, string | undefined>;
+  queryStringParameters?: Record<string, string | undefined>;
+  requestContext: { http: { method: string } };
+}
+
+async function onUrl(event: UrlEvent) {
+  const reply = (statusCode: number, body: unknown) => ({ statusCode, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  if (event.requestContext.http.method !== 'GET') return reply(405, { error: 'GET only' });
+  if (!/\/report\/?$/.test(event.rawPath)) return reply(404, { error: 'Try /report' });
+  const cfg = await integration();
+  const given = event.headers['x-86-key'] ?? event.headers['X-86-Key'] ?? '';
+  if (!cfg?.key || !given || given !== cfg.key) return reply(401, { error: 'Wrong or missing x-86-key header.' });
+  const wanted = event.queryStringParameters?.date;
+  const ymd = wanted && /^\d{4}-\d{2}-\d{2}$/.test(wanted) ? wanted : yesterdayIn(TZ);
+  try {
+    return reply(200, await report(ymd));
+  } catch (e) {
+    console.error('report failed', e instanceof Error ? e.message : e);
+    return reply(500, { error: 'Could not build the report.' });
+  }
+}
+
 // ---------- entry ----------
 
-type AppEvent = AppSyncResolverEvent<Partial<SubscribeArgs & UnsubscribeArgs>>;
+type AppEvent = AppSyncResolverEvent<Partial<SubscribeArgs & UnsubscribeArgs & { test: string }>>;
 
-function operationOf(event: AppEvent): 'pushPublicKey' | 'subscribePush' | 'unsubscribePush' {
+function operationOf(event: AppEvent): 'pushPublicKey' | 'subscribePush' | 'unsubscribePush' | 'testWebhook' {
   const named = (event as { info?: { fieldName?: string } }).info?.fieldName;
-  if (named === 'pushPublicKey' || named === 'subscribePush' || named === 'unsubscribePush') return named;
+  if (named === 'pushPublicKey' || named === 'subscribePush' || named === 'unsubscribePush' || named === 'testWebhook') return named;
   const args = event.arguments ?? {};
+  if (typeof args.test === 'string') return 'testWebhook';
   if (typeof args.p256dh === 'string') return 'subscribePush';
   if (typeof args.endpoint === 'string') return 'unsubscribePush';
   return 'pushPublicKey';
 }
 
-export const handler = async (event: DynamoDBStreamEvent | AppEvent) => {
+export const handler = async (event: DynamoDBStreamEvent | AppEvent | UrlEvent) => {
   if ('Records' in event) return onStream(event);
+  if ('rawPath' in event) return onUrl(event);
   const actor = actorFrom(event);
   try {
     switch (operationOf(event)) {
@@ -251,6 +504,8 @@ export const handler = async (event: DynamoDBStreamEvent | AppEvent) => {
         return await subscribe(actor, event.arguments as SubscribeArgs);
       case 'unsubscribePush':
         return await unsubscribe(actor, event.arguments as UnsubscribeArgs);
+      case 'testWebhook':
+        return await testWebhook(actor);
     }
   } catch (e) {
     if (e instanceof Refused) throw e;

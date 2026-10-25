@@ -4,7 +4,9 @@ import { generateClient } from 'aws-amplify/data';
 import { confirmSignIn, fetchAuthSession, getCurrentUser, signIn, signOut } from 'aws-amplify/auth';
 import type { Schema } from '../../amplify/data/resource';
 import { editorGroupsFor } from '../../shared/sample-data';
-import type { BoardApi, ManageStaffInput, ManageStaffResult, PushSubscriptionInput, SeedResult, SignInResult } from './types';
+import type { BoardApi, IntegrationSettings, ManageStaffInput, ManageStaffResult, PushSubscriptionInput, SeedResult, SignInResult } from './types';
+import { REPORT_URL } from '../amplify';
+import { newKey } from '../lib/random';
 import type { EightySixEvent, ItemStatus, MenuItem, Restaurant, Role, Session, Staff } from '../types';
 
 type Client = ReturnType<typeof generateClient<Schema>>;
@@ -234,4 +236,34 @@ export const awsApi: BoardApi = {
   async unsubscribePush(endpoint: string) {
     check(await client().mutations.unsubscribePush({ endpoint }), 'Turning alerts off');
   },
+
+  async getIntegration(): Promise<IntegrationSettings> {
+    const got = check(await client().models.Integration.get({ id: INTEGRATION_ID }), 'Reading the automation settings');
+    if (got) return toIntegration(got);
+    // First visit: make the key now so it can be pasted into n8n before anything else is saved.
+    const made = check(await client().models.Integration.create({ id: INTEGRATION_ID, key: newKey() }), 'Creating the automation settings');
+    if (!made) throw new Error('Could not create the automation settings.');
+    return toIntegration(made);
+  },
+
+  async saveIntegration(webhookUrl: string, key: string): Promise<IntegrationSettings> {
+    const saved = check(await client().models.Integration.update({ id: INTEGRATION_ID, webhookUrl: webhookUrl.trim() || null, key }), 'Saving the automation settings');
+    if (!saved) throw new Error('Could not save the automation settings.');
+    return toIntegration(saved);
+  },
+
+  async testWebhook() {
+    const res = await client().mutations.testWebhook({ test: 'now' });
+    return parseJson<{ ok: boolean; summary: string }>(check(res, 'Sending the test'));
+  },
 };
+
+const INTEGRATION_ID = 'n8n';
+
+const toIntegration = (r: Schema['Integration']['type']): IntegrationSettings => ({
+  webhookUrl: r.webhookUrl ?? '',
+  key: r.key,
+  reportUrl: REPORT_URL,
+  lastTestAt: orUndef(r.lastTestAt),
+  lastTestResult: orUndef(r.lastTestResult),
+});
