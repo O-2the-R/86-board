@@ -10,6 +10,10 @@
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc --noEmit",
+    "typecheck:backend": "node scripts/env-stubs.mjs && tsc --noEmit -p amplify/tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm run typecheck:backend && npm test",
     "build": "tsc --noEmit && vite build && node scripts/make-artifact.mjs",
     "preview": "vite preview"
   },
@@ -36,6 +40,7 @@
     "tsx": "^4.23.15",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
-    "vite-plugin-singlefile": "^2.2.0"
+    "vite-plugin-singlefile": "^2.2.0",
+    "vitest": "^3.2.7"
   }
 }

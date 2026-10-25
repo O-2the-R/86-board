@@ -1,0 +1,25 @@
+# The gate in front of main. Every pull request (and every push to main) must
+# install cleanly, type-check the app and the backend, and pass the tests.
+# Branch protection on main requires this check to be green before a merge.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run typecheck:backend
+      - run: npm test

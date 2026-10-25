@@ -20,18 +20,8 @@ import {
   UsernameExistsException,
 } from '@aws-sdk/client-cognito-identity-provider';
 import type { Schema } from '../../data/resource';
-import {
-  CLOSED_SEEDS,
-  LOW_SEEDS,
-  MENUS,
-  OPEN_SEEDS,
-  RESTAURANTS,
-  STAFF,
-  editorGroupsFor,
-  groupFor,
-  itemIdFor,
-  type SeedRole,
-} from '../../../shared/sample-data';
+import { CLOSED_SEEDS, LOW_SEEDS, MENUS, OPEN_SEEDS, RESTAURANTS, STAFF, editorGroupsFor, groupFor, itemIdFor } from '../../../shared/sample-data';
+import { Refused, actorFromIdentity, checkCreate, checkDeactivate, checkManage, checkRemove, cleanUsername, tempPassword, type Actor } from './rules';
 
 const { resourceConfig, libraryOptions } = await getAmplifyDataClientConfig(env);
 Amplify.configure(resourceConfig, libraryOptions);
@@ -41,8 +31,6 @@ const cognito = new CognitoIdentityProviderClient();
 // Set in backend.ts alongside the Cognito permissions.
 const USER_POOL_ID = process.env.USER_POOL_ID ?? '';
 
-const ROLES: SeedRole[] = ['manager', 'kitchen', 'server', 'host'];
-const RESTAURANT_IDS = RESTAURANTS.map((r) => r.id);
 const DEMO_PASSWORD = 'Welcome86!'; // every sample staff account; the owner's is set separately
 const HOUR = 3_600_000;
 
@@ -58,30 +46,10 @@ interface SeedArgs {
   confirm: string;
 }
 
-interface Actor {
-  username: string;
-  groups: string[];
-  isOwner: boolean;
-  managerOf: string[]; // restaurant ids this person manages
-}
-
-class Refused extends Error {}
-
 function actorFrom(event: AppSyncResolverEvent<unknown>): Actor {
   const id = event.identity as AppSyncIdentityCognito | null;
-  if (!id || !('username' in id)) throw new Refused('Sign in first.');
-  const groups = id.groups ?? [];
-  return {
-    username: id.username,
-    groups,
-    isOwner: groups.includes('owner'),
-    managerOf: RESTAURANT_IDS.filter((r) => groups.includes(groupFor(r, 'manager'))),
-  };
+  return actorFromIdentity(id && 'username' in id ? { username: id.username, groups: id.groups } : null);
 }
-
-const tempPassword = () => `Board-${1000 + Math.floor(Math.random() * 9000)}!`;
-
-const cleanUsername = (raw: string) => raw.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
 
 function firstError(res: { errors?: { message: string }[] | undefined }, what: string) {
   if (res.errors?.length) throw new Error(`${what}: ${res.errors.map((e) => e.message).join('; ')}`);
@@ -138,20 +106,15 @@ async function manageStaff(actor: Actor, args: ManageArgs) {
 
   if (args.action === 'create') {
     const displayName = (args.displayName ?? '').trim();
-    const role = (args.role ?? '') as SeedRole;
     const restaurantId = args.restaurantId ?? '';
-    if (!displayName) throw new Refused('Name is required.');
-    if (!ROLES.includes(role)) throw new Refused('Role must be manager, kitchen, server or host.');
-    if (!RESTAURANT_IDS.includes(restaurantId)) throw new Refused('Pick a restaurant.');
-    if (!actor.isOwner && !actor.managerOf.includes(restaurantId)) throw new Refused('You can only add staff at your own restaurant.');
+    const { role, group, permanent } = checkCreate(actor, { displayName, role: args.role ?? '', restaurantId, password: args.password ?? '' });
     if (await userExists(username)) throw new Refused(`The username ${username} is already taken.`);
 
     // A chosen password is set for good. No password means a temporary one.
     const chosen = (args.password ?? '').trim();
-    if (chosen && chosen.length < 8) throw new Refused('A password needs at least 8 characters, with a capital letter, a number and a symbol.');
     const password = chosen || tempPassword();
     try {
-      await createLogin(username, displayName, groupFor(restaurantId, role), password, Boolean(chosen));
+      await createLogin(username, displayName, group, password, permanent);
     } catch (e) {
       if (e instanceof Error && /password/i.test(e.message)) {
         throw new Refused('That password is too simple. Use at least 8 characters with a capital letter, a lowercase letter, a number and a symbol.');
@@ -168,11 +131,10 @@ async function manageStaff(actor: Actor, args: ManageArgs) {
   firstError(existing, 'Looking up the staff record');
   const person = existing.data;
   if (!person) throw new Refused(`No staff record for ${username}.`);
-  if (person.role === 'owner' && !actor.isOwner) throw new Refused('Only the owner can change the owner account.');
-  if (!actor.isOwner && !actor.managerOf.includes(person.restaurantId)) throw new Refused('You can only manage staff at your own restaurant.');
+  checkManage(actor, person);
 
   if (args.action === 'deactivate') {
-    if (username === actor.username) throw new Refused('You cannot switch off your own account.');
+    checkDeactivate(actor, person);
     await cognito.send(new AdminDisableUserCommand({ UserPoolId: USER_POOL_ID, Username: username }));
     try {
       await cognito.send(new AdminUserGlobalSignOutCommand({ UserPoolId: USER_POOL_ID, Username: username }));
@@ -203,8 +165,6 @@ async function manageStaff(actor: Actor, args: ManageArgs) {
   // Only a login nobody ever used can be removed. Anyone who has signed in
   // may be on the history, so their record stays and they get switched off.
   if (args.action === 'remove') {
-    if (username === actor.username) throw new Refused('You cannot remove your own account.');
-    if (person.active) throw new Refused('Switch the login off first, then remove it.');
     let status: string | undefined;
     try {
       const u = await cognito.send(new AdminGetUserCommand({ UserPoolId: USER_POOL_ID, Username: username }));
@@ -212,9 +172,7 @@ async function manageStaff(actor: Actor, args: ManageArgs) {
     } catch (e) {
       if (!(e instanceof UserNotFoundException)) throw e;
     }
-    if (status && status !== 'FORCE_CHANGE_PASSWORD') {
-      throw new Refused(`${person.displayName} has signed in before, so their record stays. Leave them switched off.`);
-    }
+    checkRemove(actor, person, status);
     if (status) await cognito.send(new AdminDeleteUserCommand({ UserPoolId: USER_POOL_ID, Username: username }));
     const res = await client.models.Staff.delete({ id: username });
     firstError(res, 'Removing the staff record');
