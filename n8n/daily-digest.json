@@ -1,0 +1,267 @@
+{
+  "name": "86 Board: daily digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "4393c3cb-75f8-4282-aeb5-549d33f38595",
+      "name": "Every morning at 9",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://7ppgejfucodcaosop4iqdsnkva0gegdy.lambda-url.us-east-2.on.aws/report",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "6df3891d-b927-4033-98cf-c436a4015ba4",
+      "name": "Ask 86 Board for yesterday",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "osjmohamad@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "d72df20d-1ac9-4de2-a519-63a3b5d384e3",
+      "name": "Email me the digest",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        560,
+        -120
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per 86'd dish, so the sheet gets one row each.\nconst rows = $input.first().json.rows || [];\nreturn rows.map((r) => ({ json: r }));"
+      },
+      "id": "d64361e2-0a38-47a8-a5e5-84d79169fd4f",
+      "name": "One item per dish",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1M6KFwmJWBaO_jVn8xvrpjaGMNrRv3mK_1xliyaJ7jaM"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Daily"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Date": "={{ $json.date }}",
+            "Restaurant": "={{ $json.restaurant }}",
+            "Item": "={{ $json.item }}",
+            "Note": "={{ $json.note }}",
+            "Marked by": "={{ $json.by }}",
+            "Out at": "={{ $json.outAt }}",
+            "Back at": "={{ $json.backAt }}",
+            "Back on by": "={{ $json.backBy }}",
+            "Out for": "={{ $json.outFor }}",
+            "Still out": "={{ $json.stillOut ? 'yes' : '' }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Restaurant",
+              "displayName": "Restaurant",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Item",
+              "displayName": "Item",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Note",
+              "displayName": "Note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Marked by",
+              "displayName": "Marked by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Out at",
+              "displayName": "Out at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Back at",
+              "displayName": "Back at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Back on by",
+              "displayName": "Back on by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Out for",
+              "displayName": "Out for",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Still out",
+              "displayName": "Still out",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "id": "175f61d5-3d64-4af0-9136-7778d0015279",
+      "name": "Add rows to the Daily tab",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        840,
+        120
+      ]
+    }
+  ],
+  "connections": {
+    "Every morning at 9": {
+      "main": [
+        [
+          {
+            "node": "Ask 86 Board for yesterday",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask 86 Board for yesterday": {
+      "main": [
+        [
+          {
+            "node": "Email me the digest",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "One item per dish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One item per dish": {
+      "main": [
+        [
+          {
+            "node": "Add rows to the Daily tab",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York"
+  }
+}
