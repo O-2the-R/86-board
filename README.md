@@ -17,8 +17,13 @@ Live: https://main.d2w35vo1xnmx2i.amplifyapp.com
 | Kitchen | their restaurant | yes | no |
 | Server, Host | their restaurant | no | no |
 
-The rules are enforced by the database, not just hidden in the app. A server's
-login cannot change an item even with the API called directly.
+The rules are enforced on the server, not just hidden in the app. Every item,
+history entry and staff row carries the groups allowed to read it, so a Main
+Street server's login cannot read the Waterfront board or staff list even with
+the API called directly. Nobody writes to the board directly: every 86, running
+low and back on goes through the `board` function, which checks the caller's
+role against the item's restaurant and stamps who did it from their login.
+(Restaurant names are the one thing every signed-in login can read.)
 
 ## What an item can be
 
@@ -87,7 +92,8 @@ stored in the `PushKey` table, so nothing is configured by hand.
 | `shared/sample-data.ts` | The three restaurants, menus, sample history, low items and 60 staff, used by both modes. |
 | `amplify/auth/resource.ts` | The Cognito user pool and its groups (`owner`, `main-kitchen`, `water-server`, ...). |
 | `amplify/data/resource.ts` | The database tables and who may read or change each one. |
-| `amplify/functions/staff-admin/` | The only code allowed to create, switch off or reset logins. |
+| `amplify/functions/board/` | The only code that changes the board: checks who is asking, stamps their name, keeps the history entry in step. `transitions.ts` is the plain logic; `transitions.test.ts` proves it. |
+| `amplify/functions/staff-admin/` | The only code allowed to create, switch off or reset logins. `rules.ts` holds the who-may-do-what rules. |
 | `amplify/functions/push/` | Phone alerts: registers phones and sends the push on every item change. |
 | `amplify/backend.ts` | Wires it together: usernames for sign-in, the first owner account, the table stream into the push function. |
 | `amplify.yml` | What Amplify runs on every push: deploy the backend, then build the app. |
@@ -98,8 +104,22 @@ stored in the `PushKey` table, so nothing is configured by hand.
 ```
 npm install
 npm run dev        # sample data, no AWS needed
+npm test           # the unit tests, under two seconds
+npm run check      # type-check the app and the backend, then the tests
 npm run build      # type-check, then build dist/index.html and dist/artifact.html
 ```
+
+## How changes reach the restaurant
+
+Nothing goes to `main` directly. Work happens on a branch and lands through a
+pull request. GitHub runs `check` (install, type-check, tests) on every pull
+request, and `main` is protected so a red check cannot be merged. A merge to
+`main` is the deploy: Amplify runs the type-check and the tests once more, then
+updates the backend, then builds the app.
+
+After an update that changes the data shape, the owner presses "Repair data"
+on the Staff screen once. It fills in what older rows are missing and is safe
+to run any time.
 
 ## Decisions
 
