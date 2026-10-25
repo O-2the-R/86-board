@@ -3,8 +3,7 @@
 import { generateClient } from 'aws-amplify/data';
 import { confirmSignIn, fetchAuthSession, getCurrentUser, signIn, signOut } from 'aws-amplify/auth';
 import type { Schema } from '../../amplify/data/resource';
-import { editorGroupsFor } from '../../shared/sample-data';
-import type { BoardApi, IntegrationSettings, ManageStaffInput, ManageStaffResult, PushSubscriptionInput, SeedResult, SignInResult } from './types';
+import type { BoardApi, IntegrationSettings, ManageStaffInput, ManageStaffResult, PushSubscriptionInput, RepairResult, SeedResult, SignInResult } from './types';
 import { REPORT_URL } from '../amplify';
 import { newKey } from '../lib/random';
 import type { EightySixEvent, ItemStatus, MenuItem, Restaurant, Role, Session, Staff } from '../types';
@@ -58,16 +57,31 @@ const toItem = (i: Schema['MenuItem']['type']): MenuItem => ({
   lowSince: orUndef(i.lowSince),
 });
 
-// Ends the 86 entry that is still open for this item.
-async function closeOpenEvent(restaurantId: string, itemId: string, now: string, by: string) {
-  const open = check(
-    await client().models.EightySixEvent.listEightySixEventByRestaurantIdAndStartedAt(
-      { restaurantId },
-      { sortDirection: 'DESC', limit: 100, filter: { itemId: { eq: itemId }, endedAt: { attributeExists: false } } },
-    ),
-    'Finding the open history entry',
-  );
-  await Promise.all(open.map((e) => client().models.EightySixEvent.update({ id: e.id, endedAt: now, clearedBy: by })));
+// Follows the pages of a list until there are none, so a long menu, a busy
+// month or a big staff never gets cut off at the first page.
+async function allPages<T>(
+  what: string,
+  page: (nextToken: string | undefined) => Promise<{ data: T[]; nextToken?: string | null; errors?: { message: string }[] }>,
+  stop?: (rows: T[]) => boolean,
+): Promise<T[]> {
+  const out: T[] = [];
+  let nextToken: string | undefined;
+  for (let i = 0; i < 100; i++) {
+    const res = await page(nextToken);
+    check(res, what);
+    out.push(...res.data);
+    if (!res.nextToken || (stop && stop(res.data))) break;
+    nextToken = res.nextToken;
+  }
+  return out;
+}
+
+// Every change to the board goes through the board function, which checks
+// the caller's role and stamps their name. The `by` the screens pass along
+// is only used by the sample mode.
+async function change(itemId: string, action: 'out' | 'low' | 'back', extra: { note?: string; count?: number } = {}) {
+  const res = await client().mutations.changeItem({ itemId, action, note: extra.note, count: extra.count });
+  check(res, action === 'out' ? 'Marking the item 86’d' : action === 'low' ? 'Marking the item running low' : 'Marking the item back on');
 }
 
 const toEvent = (e: Schema['EightySixEvent']['type']): EightySixEvent => ({
@@ -127,7 +141,7 @@ export const awsApi: BoardApi = {
   },
 
   async listRestaurants() {
-    const rows = check(await client().models.Restaurant.list({ limit: 50 }), 'Loading restaurants');
+    const rows = await allPages('Loading restaurants', (nextToken) => client().models.Restaurant.list({ limit: 50, nextToken }));
     return rows
       .slice()
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
@@ -135,75 +149,37 @@ export const awsApi: BoardApi = {
   },
 
   async listItems(restaurantId) {
-    const rows = check(await client().models.MenuItem.listMenuItemByRestaurantId({ restaurantId }, { limit: 500 }), 'Loading the board');
+    const rows = await allPages('Loading the board', (nextToken) => client().models.MenuItem.listMenuItemByRestaurantId({ restaurantId }, { limit: 500, nextToken }));
     return rows.map(toItem).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   },
 
-  async markOut(itemId, note, by) {
-    const item = check(await client().models.MenuItem.get({ id: itemId }), 'Finding the item');
-    if (!item || item.status === 'out') return;
-    const now = new Date().toISOString();
-    check(
-      await client().models.MenuItem.update({ id: itemId, status: 'out', outSince: now, note: note || null, markedBy: by, lowCount: null, lowSince: null }),
-      'Marking the item 86’d',
-    );
-    check(
-      await client().models.EightySixEvent.create({
-        restaurantId: item.restaurantId,
-        itemId: item.id,
-        itemName: item.name,
-        startedAt: now,
-        note: note || null,
-        markedBy: by,
-        editors: editorGroupsFor(item.restaurantId),
-      }),
-      'Writing the history entry',
-    );
+  async markOut(itemId, note) {
+    await change(itemId, 'out', { note });
   },
 
-  async markLow(itemId, count, by) {
-    const item = check(await client().models.MenuItem.get({ id: itemId }), 'Finding the item');
-    if (!item) return;
-    const now = new Date().toISOString();
-    const wasLow = item.status === 'low';
-    check(
-      await client().models.MenuItem.update({
-        id: itemId,
-        status: 'low',
-        lowCount: Math.max(1, Math.round(count)),
-        lowSince: wasLow && item.lowSince ? item.lowSince : now,
-        markedBy: by,
-        outSince: null,
-        note: null,
-      }),
-      'Marking the item running low',
-    );
-    if (item.status === 'out') await closeOpenEvent(item.restaurantId, itemId, now, by);
+  async markLow(itemId, count) {
+    await change(itemId, 'low', { count });
   },
 
-  async markBack(itemId, by) {
-    const item = check(await client().models.MenuItem.get({ id: itemId }), 'Finding the item');
-    if (!item || item.status === 'available') return;
-    const now = new Date().toISOString();
-    check(
-      await client().models.MenuItem.update({ id: itemId, status: 'available', outSince: null, note: null, markedBy: null, lowCount: null, lowSince: null }),
-      'Marking the item back on',
-    );
-    if (item.status === 'out') await closeOpenEvent(item.restaurantId, itemId, now, by);
+  async markBack(itemId) {
+    await change(itemId, 'back');
   },
 
   async listHistory(restaurantId, days) {
-    const rows = check(
-      await client().models.EightySixEvent.listEightySixEventByRestaurantIdAndStartedAt({ restaurantId }, { sortDirection: 'DESC', limit: 500 }),
-      'Loading history',
-    );
     const cutoff = Date.now() - days * 24 * HOUR;
+    const cutoffIso = new Date(cutoff).toISOString();
+    // Newest first; stop paging once a whole page started before the cutoff.
+    const rows = await allPages(
+      'Loading history',
+      (nextToken) => client().models.EightySixEvent.listEightySixEventByRestaurantIdAndStartedAt({ restaurantId }, { sortDirection: 'DESC', limit: 200, nextToken }),
+      (page) => page.length > 0 && page.every((e) => e.startedAt < cutoffIso),
+    );
     const now = Date.now();
     return rows.map(toEvent).filter((e) => (e.endedAt ? Date.parse(e.endedAt) : now) >= cutoff);
   },
 
   async listStaff() {
-    const rows = check(await client().models.Staff.list({ limit: 1000 }), 'Loading staff');
+    const rows = await allPages('Loading staff', (nextToken) => client().models.Staff.list({ limit: 500, nextToken }));
     return rows.map(toStaff);
   },
 
@@ -222,6 +198,11 @@ export const awsApi: BoardApi = {
   async seedDemo(): Promise<SeedResult> {
     const res = await client().mutations.seedDemo({ confirm: 'LOAD' });
     return parseJson<SeedResult>(check(res, 'Loading demo data'));
+  },
+
+  async repairData(): Promise<RepairResult> {
+    const res = await client().mutations.repairData({ confirm: 'REPAIR' });
+    return parseJson<RepairResult>(check(res, 'Repairing the data'));
   },
 
   async pushPublicKey() {

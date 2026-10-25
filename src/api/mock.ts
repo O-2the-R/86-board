@@ -264,6 +264,11 @@ export const mockApi: BoardApi = {
     return { ok: true, restaurants: 3, items: 43, events: 14, staff: 60, demoPassword: 'any password' };
   },
 
+  async repairData() {
+    await wait(200);
+    return { ok: true, items: 0, events: 0, staff: 0, openEvents: 0 };
+  },
+
   // Alerts need a real server to send them. The preview only shows the screens.
   async pushPublicKey() {
     return null;
