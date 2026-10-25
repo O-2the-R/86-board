@@ -29,6 +29,14 @@ export interface SeedResult {
   demoPassword: string;
 }
 
+export interface RepairResult {
+  ok: boolean;
+  items: number;
+  events: number;
+  staff: number;
+  openEvents: number;
+}
+
 export type SignInResult = { status: 'done' } | { status: 'newPassword' };
 
 // What the browser hands us when a phone signs up for alerts.
@@ -64,6 +72,8 @@ export interface BoardApi {
   // the board
   listRestaurants(): Promise<Restaurant[]>;
   listItems(restaurantId: string): Promise<MenuItem[]>;
+  // `by` is the name shown in the sample mode; the real app stamps the name
+  // on the server from the login and ignores it.
   markOut(itemId: string, note: string, by: string): Promise<void>;
   // a few portions left; count is what is left right now
   markLow(itemId: string, count: number, by: string): Promise<void>;
@@ -75,6 +85,8 @@ export interface BoardApi {
   listStaff(): Promise<Staff[]>;
   manageStaff(input: ManageStaffInput): Promise<ManageStaffResult>;
   seedDemo(): Promise<SeedResult>;
+  // owner only: fills in what older rows are missing; safe to run any time
+  repairData(): Promise<RepairResult>;
 
   // phone alerts (web push). null public key means alerts are not available here.
   pushPublicKey(): Promise<string | null>;

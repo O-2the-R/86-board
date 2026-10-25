@@ -20,7 +20,7 @@ import {
   UsernameExistsException,
 } from '@aws-sdk/client-cognito-identity-provider';
 import type { Schema } from '../../data/resource';
-import { CLOSED_SEEDS, LOW_SEEDS, MENUS, OPEN_SEEDS, RESTAURANTS, STAFF, editorGroupsFor, groupFor, itemIdFor } from '../../../shared/sample-data';
+import { CLOSED_SEEDS, LOW_SEEDS, MENUS, OPEN_SEEDS, RESTAURANTS, STAFF, editorGroupsFor, groupFor, itemIdFor, readersFor } from '../../../shared/sample-data';
 import { Refused, actorFromIdentity, checkCreate, checkDeactivate, checkManage, checkRemove, cleanUsername, tempPassword, type Actor } from './rules';
 
 const { resourceConfig, libraryOptions } = await getAmplifyDataClientConfig(env);
@@ -121,7 +121,7 @@ async function manageStaff(actor: Actor, args: ManageArgs) {
       }
       throw e;
     }
-    const res = await client.models.Staff.create({ id: username, username, displayName, role, restaurantId, active: true, lastChangedBy: by });
+    const res = await client.models.Staff.create({ id: username, username, displayName, role, restaurantId, active: true, lastChangedBy: by, readers: readersFor(restaurantId) });
     firstError(res, 'Saving the staff record');
     return chosen ? { ok: true, username, passwordSet: true } : { ok: true, username, temporaryPassword: password };
   }
@@ -225,6 +225,7 @@ async function seedDemo(actor: Actor, args: SeedArgs) {
       sortOrder: row.sortOrder,
       status: 'available',
       editors: editorGroupsFor(row.restaurantId),
+      readers: readersFor(row.restaurantId),
     });
     firstError(res, `Creating ${row.name}`);
     counts.items += 1;
@@ -245,6 +246,7 @@ async function seedDemo(actor: Actor, args: SeedArgs) {
         markedBy: s.by,
         clearedBy: s.clearedBy,
         editors: editorGroupsFor(s.rest),
+        readers: readersFor(s.rest),
       });
       firstError(res, `History for ${s.item}`);
       counts.events += 1;
@@ -260,9 +262,10 @@ async function seedDemo(actor: Actor, args: SeedArgs) {
         note: s.note,
         markedBy: s.by,
         editors: editorGroupsFor(s.rest),
+        readers: readersFor(s.rest),
       });
       firstError(ev, `Open 86 for ${s.item}`);
-      const up = await client.models.MenuItem.update({ id, status: 'out', outSince: startedAt, note: s.note, markedBy: s.by });
+      const up = await client.models.MenuItem.update({ id, status: 'out', outSince: startedAt, note: s.note, markedBy: s.by, openEventId: ev.data?.id ?? null });
       firstError(up, `Marking ${s.item} out`);
       counts.events += 1;
     });
@@ -287,6 +290,7 @@ async function seedDemo(actor: Actor, args: SeedArgs) {
         restaurantId: p.restaurantId,
         active: true,
         lastChangedBy: actor.username,
+        readers: readersFor(p.restaurantId),
       });
       firstError(res, `Staff record for ${p.username}`);
     }
@@ -304,6 +308,7 @@ async function seedDemo(actor: Actor, args: SeedArgs) {
       restaurantId: 'all',
       active: true,
       lastChangedBy: actor.username,
+      readers: readersFor('all'),
     });
     firstError(res, 'Owner staff record');
   }

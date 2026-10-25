@@ -7,12 +7,14 @@ import { auth } from './auth/resource';
 import { data } from './data/resource';
 import { staffAdmin } from './functions/staff-admin/resource';
 import { push } from './functions/push/resource';
+import { board } from './functions/board/resource';
 
 const backend = defineBackend({
   auth,
   data,
   staffAdmin,
   push,
+  board,
 });
 
 const userPool = backend.auth.resources.userPool;

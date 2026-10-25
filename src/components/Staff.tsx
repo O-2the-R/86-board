@@ -102,6 +102,23 @@ export function Staff({ session, restaurants, onDataChanged }: Props) {
     }
   }
 
+  // Owner only. Fills in what older rows are missing after an update that
+  // changes the data shape. Safe to run any time.
+  async function repair() {
+    setBusy('repair');
+    setError(null);
+    try {
+      const r = await api.repairData();
+      setNotice({ title: `Repair done. Updated ${r.items} items (${r.openEvents} open history links), ${r.events} history entries and ${r.staff} staff rows.` });
+      onDataChanged();
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'The repair did not run.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const empty = people !== null && people.filter((p) => p.role !== 'owner').length === 0;
   const count = people?.length ?? 0;
 
@@ -117,6 +134,11 @@ export function Staff({ session, restaurants, onDataChanged }: Props) {
             {owner && empty && api.mode === 'aws' && !confirmSeed && (
               <button type="button" className="btn btn-sm btn-outline" disabled={busy === 'seed'} onClick={() => setConfirmSeed(true)}>
                 Load demo data
+              </button>
+            )}
+            {owner && !empty && api.mode === 'aws' && (
+              <button type="button" className="btn btn-sm btn-outline" disabled={busy === 'repair'} onClick={repair} title="Fills in anything older rows are missing. Safe any time.">
+                {busy === 'repair' ? 'Repairing…' : 'Repair data'}
               </button>
             )}
             <button type="button" className={'btn btn-sm' + (showForm ? ' btn-outline' : '')} onClick={() => setShowForm((v) => !v)}>
