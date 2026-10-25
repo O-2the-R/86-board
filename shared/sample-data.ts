@@ -183,3 +183,12 @@ export const EDITOR_ROLES: SeedRole[] = ['manager', 'kitchen'];
 
 // Groups allowed to change a restaurant's board.
 export const editorGroupsFor = (restaurantId: string): string[] => EDITOR_ROLES.map((role) => groupFor(restaurantId, role));
+
+export const ALL_ROLES: SeedRole[] = ['manager', 'kitchen', 'server', 'host'];
+
+// Groups allowed to see a restaurant's board, history and staff list: everyone
+// who works there. The owner is covered by the owner group itself.
+export const readerGroupsFor = (restaurantId: string): string[] => ALL_ROLES.map((role) => groupFor(restaurantId, role));
+
+// Owner rows (restaurantId 'all') are the owner's alone.
+export const readersFor = (restaurantId: string): string[] => (restaurantId === 'all' ? ['owner'] : readerGroupsFor(restaurantId));

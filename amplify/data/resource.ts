@@ -1,13 +1,17 @@
 import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
 import { staffAdmin } from '../functions/staff-admin/resource';
 import { push } from '../functions/push/resource';
+import { board } from '../functions/board/resource';
 
 // The shared database. Every phone reads the same tables.
 //
 // Rules in plain words:
-//   - Anyone signed in can read the boards and the history.
-//   - A restaurant's managers and kitchen (the "editors" groups stored on
-//     each record) can change that restaurant's items and 86 events.
+//   - People see their own restaurant only: every item, history entry and
+//     staff row carries the groups allowed to read it ("readers"), which are
+//     that restaurant's manager, kitchen, server and host groups.
+//   - Nobody writes to the board directly. The changeItem mutation runs the
+//     board function, which checks the caller's role against the item's
+//     restaurant and stamps who did it from their login.
 //   - The owner can do anything.
 //   - Staff accounts are changed only through the manageStaff mutation,
 //     which runs the staff-admin function.
@@ -34,14 +38,12 @@ const schema = a
         markedBy: a.string(),
         lowCount: a.integer(), // portions left while running low
         lowSince: a.datetime(),
-        editors: a.string().array().required(), // groups allowed to update
+        openEventId: a.string(), // the history entry still open while the item is 86'd
+        editors: a.string().array().required(), // groups allowed to change it (checked by the board function)
+        readers: a.string().array(), // groups allowed to see it
       })
       .secondaryIndexes((index) => [index('restaurantId')])
-      .authorization((allow) => [
-        allow.authenticated().to(['read']),
-        allow.group('owner'),
-        allow.groupsDefinedIn('editors').to(['update']),
-      ]),
+      .authorization((allow) => [allow.group('owner'), allow.groupsDefinedIn('readers').to(['read'])]),
 
     EightySixEvent: a
       .model({
@@ -54,15 +56,14 @@ const schema = a
         markedBy: a.string().required(),
         clearedBy: a.string(),
         editors: a.string().array().required(),
+        readers: a.string().array(),
       })
       .secondaryIndexes((index) => [index('restaurantId').sortKeys(['startedAt'])])
-      .authorization((allow) => [
-        allow.authenticated().to(['read']),
-        allow.group('owner'),
-        allow.groupsDefinedIn('editors').to(['create', 'update']),
-      ]),
+      .authorization((allow) => [allow.group('owner'), allow.groupsDefinedIn('readers').to(['read'])]),
 
-    // One row per login. The id is the username.
+    // One row per login. The id is the username. Readable by the people at
+    // that restaurant (they need their own row to know they are still switched
+    // on, and managers need the list); the owner's row by the owner only.
     Staff: a
       .model({
         username: a.string().required(),
@@ -71,8 +72,33 @@ const schema = a
         restaurantId: a.string().required(), // 'all' for the owner
         active: a.boolean().required(),
         lastChangedBy: a.string(),
+        readers: a.string().array(),
       })
-      .authorization((allow) => [allow.authenticated().to(['read'])]),
+      .authorization((allow) => [allow.group('owner').to(['read']), allow.groupsDefinedIn('readers').to(['read'])]),
+
+    // The only way the board changes. action: out | low | back.
+    // The board function checks the caller may edit that restaurant, stamps
+    // who did it, and keeps the history entry in step with the item.
+    changeItem: a
+      .mutation()
+      .arguments({
+        itemId: a.string().required(),
+        action: a.string().required(),
+        note: a.string(),
+        count: a.integer(),
+      })
+      .returns(a.json())
+      .authorization((allow) => [allow.authenticated()])
+      .handler(a.handler.function(board)),
+
+    // Owner only. Fills in anything older rows are missing (readers, the open
+    // history entry on 86'd items). Safe to run any time.
+    repairData: a
+      .mutation()
+      .arguments({ confirm: a.string().required() })
+      .returns(a.json())
+      .authorization((allow) => [allow.group('owner')])
+      .handler(a.handler.function(board)),
 
     // action: create | deactivate | reactivate | resetPassword
     // password: optional on create. Given, it is the person's real password;
@@ -167,7 +193,7 @@ const schema = a
       .authorization((allow) => [allow.group('owner')])
       .handler(a.handler.function(push)),
   })
-  .authorization((allow) => [allow.resource(staffAdmin), allow.resource(push)]);
+  .authorization((allow) => [allow.resource(staffAdmin), allow.resource(push), allow.resource(board)]);
 
 export type Schema = ClientSchema<typeof schema>;
 
