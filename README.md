@@ -51,14 +51,37 @@ returns it.
 
 ## Adding people
 
-Staff, "Add a person". Name, username (suggested from the name), role,
-restaurant. Leave the password empty and they get a temporary one, shown with a
-Copy button, which they replace at their first sign-in. Type a password and that
-is their password from the start.
+Staff, "Add a person". Name, username, role, restaurant.
+
+- **Username.** Suggested from the name, in plain letters: "José Peña" becomes
+  `jose.pena`. The app checks it is free while you type. If `marco.r` is taken,
+  the new Marco gets `marco.r2`, and the form says so before you save.
+- **Password.** Leave it empty and they get a temporary one, which they replace
+  at their first sign-in. Or tap Generate for a password that is theirs from
+  the start. Either way it looks like `Basil-Tray-4821!`: two kitchen words,
+  four digits and a symbol. Easy to read out over the pass, and one of over a
+  billion possibilities.
+- **Login message.** After saving, "Copy login message" copies a ready-to-text
+  note with the app's address, the username and the password.
+
+The rules live in `shared/logins.ts`, used by the app and the server alike, and
+`shared/logins.test.ts` proves them.
 
 Tap a person to reset their password, switch them off, or switch them back on.
 Switching off signs them out within seconds, stops their phone alerts, and keeps
 their name in the history. Only a login that was never used can be removed.
+
+## The public demo
+
+Anyone can try the app without an account: the "Try the demo" button under the
+sign-in, or the link `…/?demo`. The visitor picks a role (kitchen, server,
+manager, owner), gets a made-up login like `guest.kitchen.4821` from the same
+password generator, and explores the three sample restaurants.
+
+The demo never talks to AWS. `src/lib/demo.ts` switches the data drawer to
+sample data (`src/api/mock.ts`) for that browser tab, so nothing a visitor does
+reaches the real board, sends an alert, or creates a real login. "Exit demo"
+goes back to the staff sign-in.
 
 ## Phone alerts and the home-screen app
 
@@ -87,7 +110,9 @@ person who runs them, not in the repo.
 | `index.html` | The page shell, icons and the home-screen app tags. |
 | `public/manifest.json`, `public/sw.js`, `public/icons/` | What makes the site installable, and the service worker that shows alerts. |
 | `src/App.tsx` | The screen: who is signed in, which restaurant, Board / History / Staff, the bell. |
-| `src/components/Login.tsx` | Username and password; handles the first-time password change. |
+| `src/components/Login.tsx` | Username and password; handles the first-time password change; the "Try the demo" button. |
+| `src/components/DemoStart.tsx` | The demo's front door: pick a role, get a made-up login, start. |
+| `src/lib/demo.ts` | Decides when this tab is the demo, and the demo roles. |
 | `src/components/Board.tsx` | The board. 86'd and running-low tickets on top, full menu below, the item sheet. |
 | `src/components/Alerts.tsx` | The bell, the nudge, and the sheet that turns alerts on or off. |
 | `src/components/History.tsx` | What was out, how often, for how long. |
@@ -98,6 +123,7 @@ person who runs them, not in the repo.
 | `src/api/` | The data drawer. `aws.ts` talks to the backend; `mock.ts` is sample data in the browser; `index.ts` picks one. |
 | `src/amplify.ts` | Picks AWS when `amplify_outputs.json` exists (it does on Amplify builds), sample data otherwise. |
 | `shared/sample-data.ts` | The three restaurants, menus, sample history, low items and 60 staff, used by both modes. |
+| `shared/logins.ts` | Usernames (plain letters, next free one) and generated passwords, used by the app and the server. |
 | `amplify/auth/resource.ts` | The Cognito user pool and its groups (`owner`, `main-kitchen`, `water-server`, ...). |
 | `amplify/data/resource.ts` | The database tables and who may read or change each one. |
 | `amplify/functions/board/` | The only code that changes the board: checks who is asking, stamps their name, keeps the history entry in step. `transitions.ts` is the plain logic; `transitions.test.ts` proves it. |

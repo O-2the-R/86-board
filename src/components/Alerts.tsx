@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { readString, writeString } from '../lib/storage';
 import { alertState, canPromptInstall, isStandalone, promptInstall, rebind, turnOff, turnOn, type AlertState } from '../push';
+import { inDemo } from '../lib/demo';
 
 const NUDGE_KEY = 'eightysix.alerts.nudge';
 
@@ -153,7 +154,7 @@ export function AlertsSheet({ state, restaurantName, onChange, onClose }: SheetP
         )}
 
         {state === 'preview' && (
-          <p className="sheet-text">This is the preview with sample data, so there is no server to send alerts. On the real site this is where you turn them on.</p>
+          <p className="sheet-text">This is the {inDemo() ? 'demo' : 'preview'} with sample data, so there is no server to send alerts. On the real site this is where you turn them on.</p>
         )}
 
         {error && (

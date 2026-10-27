@@ -1,6 +1,7 @@
 // Sample data shared by the in-browser preview (src/api/mock.ts) and the
 // one-time "load demo data" step in the backend (amplify/functions/staff-admin).
 // Three restaurants, their menus, a week of 86 history, and 60 staff.
+import { usernameFor } from './logins';
 
 export type SeedRole = 'manager' | 'kitchen' | 'server' | 'host';
 
@@ -153,14 +154,8 @@ const ROSTER: Record<string, Record<SeedRole, string[]>> = {
   },
 };
 
-// "Marco R." -> "marco.r"
-export const usernameFor = (displayName: string): string =>
-  displayName
-    .toLowerCase()
-    .replace(/\./g, '')
-    .trim()
-    .split(/\s+/)
-    .join('.');
+// "Marco R." -> "marco.r". Lives in logins.ts with the other username rules.
+export { usernameFor };
 
 export const STAFF: SeedStaff[] = Object.entries(ROSTER).flatMap(([restaurantId, byRole]) =>
   (Object.keys(byRole) as SeedRole[]).flatMap((role) =>

@@ -100,7 +100,8 @@ const schema = a
       .authorization((allow) => [allow.group('owner')])
       .handler(a.handler.function(board)),
 
-    // action: create | deactivate | reactivate | resetPassword
+    // action: create | deactivate | reactivate | resetPassword | remove |
+    // suggestUsername (the first free one from the given username: marco.r2)
     // password: optional on create. Given, it is the person's real password;
     // left out, they get a temporary one and choose their own at first sign-in.
     manageStaff: a

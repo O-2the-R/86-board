@@ -7,9 +7,11 @@ import { ROLE_LABEL, STAFF_ROLES, isOwner } from '../types';
 import { api } from '../api';
 import type { ManageAction } from '../api/types';
 import { initials } from '../lib/format';
-import { CopyLine } from './CopyLine';
+import { CopyLine, CopyMessage } from './CopyLine';
 import { Automations } from './Automations';
-import { usernameFor } from '../../shared/sample-data';
+import { cleanUsername, loginMessage, passwordFrom, usernameFor } from '../../shared/logins';
+import { randomInt } from '../lib/random';
+import { inDemo } from '../lib/demo';
 
 interface Props {
   session: Session;
@@ -21,7 +23,13 @@ interface Notice {
   title: string;
   username?: string; // shown as its own copyable line
   password?: string; // temporary password, copyable
+  name?: string; // with username and password: offer the ready-to-text login message
+  permanent?: boolean; // the password is for good, not temporary
 }
+
+// Where a new person opens the app: this site's own address. In the demo, the
+// demo's address, because that is where the made-up login works.
+const appLink = () => (typeof window === 'undefined' ? '' : window.location.origin + (inDemo() ? '/?demo' : ''));
 
 export function Staff({ session, restaurants, onDataChanged }: Props) {
   const owner = isOwner(session);
@@ -69,7 +77,12 @@ export function Staff({ session, restaurants, onDataChanged }: Props) {
     try {
       const res = await api.manageStaff({ action, username: p.username });
       if (action === 'resetPassword') {
-        setNotice({ title: `New temporary password for ${p.displayName}. They will choose their own at the next sign-in.`, username: p.username, password: res.temporaryPassword });
+        setNotice({
+          title: `New temporary password for ${p.displayName}. They will choose their own at the next sign-in.`,
+          username: p.username,
+          password: res.temporaryPassword,
+          name: p.displayName,
+        });
       }
       if (action === 'remove') setNotice({ title: `${p.displayName} (${p.username}) was removed. The login was never used, so nothing in the history refers to it.` });
       if (action === 'deactivate') setNotice({ title: `${p.displayName} is switched off and signed out. Their name stays in the history.` });
@@ -177,6 +190,11 @@ export function Staff({ session, restaurants, onDataChanged }: Props) {
             </div>
             {notice.username && <CopyLine label="Username" value={notice.username} big />}
             {notice.password && <CopyLine label="Password" value={notice.password} big />}
+            {notice.name && notice.username && notice.password && (
+              <CopyMessage
+                text={loginMessage({ name: notice.name, link: appLink(), username: notice.username, password: notice.password, temporary: !notice.permanent })}
+              />
+            )}
           </div>
         )}
 
@@ -336,25 +354,58 @@ function AddForm({ session, restaurants, onDone }: { session: Session; restauran
   const [role, setRole] = useState<StaffRole>('server');
   const [restaurantId, setRestaurantId] = useState(owner ? (restaurants[0]?.id ?? '') : session.restaurantId);
   const [password, setPassword] = useState('');
+  const [generated, setGenerated] = useState(false); // the password came from Generate and was not edited
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The server's answer to "is this username free?": the first free one
+  // from `asked`, e.g. asked marco.r, free marco.r2.
+  const [check, setCheck] = useState<{ asked: string; free: string } | null>(null);
 
   const suggested = usernameFor(name);
-  const finalUsername = touched ? username : suggested;
+  const base = touched ? username : suggested; // what we ask about
+  const free = check && check.asked === base ? check.free : null; // null while checking
+  const shown = touched ? username : (free ?? suggested); // what the box shows and what gets saved
+  const takenTyped = touched && free !== null && free !== username;
+
+  // Ask a moment after typing stops, so marco.r becomes marco.r2 before Create login.
+  useEffect(() => {
+    if (!base) return;
+    let stale = false;
+    const t = window.setTimeout(async () => {
+      try {
+        const res = await api.manageStaff({ action: 'suggestUsername', username: base });
+        if (!stale) setCheck({ asked: base, free: res.username });
+      } catch {
+        if (!stale) setCheck({ asked: base, free: base }); // could not ask; the server still checks on save
+      }
+    }, 350);
+    return () => {
+      stale = true;
+      window.clearTimeout(t);
+    };
+  }, [base]);
+
+  function generate() {
+    setPassword(passwordFrom(randomInt));
+    setGenerated(true);
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
+    const displayName = name.trim();
+    const chosen = password.trim();
     try {
-      const res = await api.manageStaff({ action: 'create', username: finalUsername, displayName: name.trim(), role, restaurantId, password: password.trim() });
+      const res = await api.manageStaff({ action: 'create', username: shown, displayName, role, restaurantId, password: chosen });
       await onDone(
         res.passwordSet
-          ? { title: `${name.trim()} can sign in now with the password you chose.`, username: res.username }
+          ? { title: `${displayName} can sign in now with the password you chose.`, username: res.username, password: chosen, name: displayName, permanent: true }
           : {
-              title: `${name.trim()} can sign in with this temporary password. They will choose their own the first time.`,
+              title: `${displayName} can sign in with this temporary password. They will choose their own the first time.`,
               username: res.username,
               password: res.temporaryPassword,
+              name: displayName,
             },
       );
     } catch (err) {
@@ -363,6 +414,8 @@ function AddForm({ session, restaurants, onDone }: { session: Session; restauran
       setBusy(false);
     }
   }
+
+  const firstName = name.trim().split(/\s+/)[0] || 'They';
 
   return (
     <form className="panel form" onSubmit={submit}>
@@ -385,13 +438,32 @@ function AddForm({ session, restaurants, onDone }: { session: Session; restauran
             autoCorrect="off"
             spellCheck={false}
             placeholder="marco.r"
-            value={finalUsername}
+            value={shown}
             onChange={(e) => {
               setTouched(true);
-              setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''));
+              setUsername(cleanUsername(e.target.value));
             }}
             required
           />
+          {shown &&
+            (free === null ? (
+              <span className="hint">Checking it is free…</span>
+            ) : takenTyped ? (
+              <span className="hint hint-warn">
+                {username} is taken.{' '}
+                <button type="button" className="link-btn hint-btn" onClick={() => setUsername(free)}>
+                  Use {free}
+                </button>
+              </span>
+            ) : !touched && free !== suggested ? (
+              <span className="hint hint-ok">
+                {suggested} is taken, so {firstName} gets <b>{free}</b>
+              </span>
+            ) : (
+              <span className="hint hint-ok">
+                {touched ? 'Free. ' : ''}They sign in with: <b>{shown}</b>
+              </span>
+            ))}
         </div>
       </div>
 
@@ -431,23 +503,33 @@ function AddForm({ session, restaurants, onDone }: { session: Session; restauran
         <label className="field-label" htmlFor="add-pass">
           Password, optional
         </label>
-        <input
-          id="add-pass"
-          className="input"
-          type="text"
-          autoComplete="off"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          placeholder="Leave empty for a temporary one"
-          minLength={8}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        <div className="input-with-btn">
+          <input
+            id="add-pass"
+            className="input"
+            type="text"
+            autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            placeholder="Leave empty"
+            minLength={8}
+            value={password}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setGenerated(false);
+            }}
+          />
+          <button type="button" className="btn btn-sm btn-amber" onClick={generate}>
+            Generate
+          </button>
+        </div>
         <span className="hint">
-          {password.trim()
-            ? 'This becomes their password. At least 8 characters with a capital letter, a number and a symbol.'
-            : 'Empty means they get a temporary password and choose their own at first sign-in.'}
+          {generated
+            ? 'Strong, and easy to read out loud. This becomes their password. Tap Generate for another.'
+            : password.trim()
+              ? 'This becomes their password. At least 8 characters with a capital letter, a number and a symbol.'
+              : 'Empty means they get a temporary password and choose their own at first sign-in.'}
         </span>
       </div>
 
@@ -458,7 +540,7 @@ function AddForm({ session, restaurants, onDone }: { session: Session; restauran
       )}
 
       <div className="actions">
-        <button type="submit" className="btn" disabled={busy || !name.trim() || !finalUsername || !restaurantId}>
+        <button type="submit" className="btn" disabled={busy || !name.trim() || !shown || !restaurantId || free === null || takenTyped}>
           {busy ? 'Creating…' : 'Create login'}
         </button>
       </div>

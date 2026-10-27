@@ -1411,6 +1411,154 @@ button.staff-row:active {
   padding: 0 8px;
 }
 
+/* ---------- login generator + demo ---------- */
+
+.hint-ok {
+  color: var(--sage);
+}
+
+.hint-ok b {
+  font-weight: 700;
+}
+
+.hint-warn {
+  color: var(--amber);
+}
+
+.hint-btn {
+  min-height: 0;
+  padding: 0;
+  font-size: 13px;
+  text-decoration: underline;
+}
+
+.input-with-btn {
+  position: relative;
+}
+
+.input-with-btn .input {
+  padding-right: 112px;
+}
+
+.input-with-btn .btn {
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.input-with-btn .btn:active {
+  transform: translateY(-50%) scale(0.98);
+}
+
+.copy-message {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.copy-message-text {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--paper-2);
+  color: var(--paper-ink);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.foot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.demo {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.demo-ask {
+  text-align: center;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.demo-roles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.demo-role {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 108px;
+  padding: 14px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  background: var(--bg-2);
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+}
+
+.demo-role:hover {
+  border-color: var(--amber);
+}
+
+.demo-role-name {
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.demo-role-line {
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.demo-login {
+  gap: 12px;
+}
+
+.demo-login-title {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--paper-muted);
+}
+
+.demo-login .btn-text {
+  align-self: center;
+}
+
+.demo-login .notice-pass {
+  font-size: 18px;
+}
+
+.demo-alt {
+  align-self: center;
+  font-size: 14px;
+}
+
+.demo-invite {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding-top: 18px;
+  border-top: 1px dashed var(--line-2);
+}
+
 /* ---------- misc ---------- */
 
 .foot {

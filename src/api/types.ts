@@ -1,6 +1,6 @@
 import type { EightySixEvent, MenuItem, Restaurant, Session, Staff, StaffRole } from '../types';
 
-export type ManageAction = 'create' | 'deactivate' | 'reactivate' | 'resetPassword' | 'remove';
+export type ManageAction = 'create' | 'deactivate' | 'reactivate' | 'resetPassword' | 'remove' | 'suggestUsername';
 
 export interface ManageStaffInput {
   action: ManageAction;

@@ -1,8 +1,11 @@
 // The front door. Username and password; a first sign-in on a temporary
-// password asks for a new one before letting the person in.
+// password asks for a new one before letting the person in. Visitors who are
+// not on staff can open the demo from here instead.
 import { useState, type FormEvent } from 'react';
 import type { Restaurant } from '../types';
 import { api } from '../api';
+import { closeDemo, inDemo, openDemo } from '../lib/demo';
+import { DemoStart } from './DemoStart';
 
 interface Props {
   restaurants: Restaurant[];
@@ -16,6 +19,8 @@ export function Login({ restaurants, onSignedIn }: Props) {
   const [step, setStep] = useState<'signIn' | 'newPassword'>('signIn');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const demo = inDemo();
+  const [view, setView] = useState<'demo' | 'form'>(demo ? 'demo' : 'form');
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -45,84 +50,111 @@ export function Login({ restaurants, onSignedIn }: Props) {
           <span className="login-ticket-rule" />
         </div>
         <h1 className="login-title">86 Board</h1>
-        <p className="login-sub">What is out tonight, and since when.</p>
+        <p className="login-sub">{demo ? 'Try it as anyone on the team.' : 'What is out tonight, and since when.'}</p>
       </div>
 
-      <form className="login-form" onSubmit={submit}>
-        {step === 'signIn' ? (
-          <>
-            <div className="field">
-              <label className="field-label" htmlFor="login-user">
-                Username
-              </label>
-              <input
-                id="login-user"
-                className="input"
-                type="text"
-                autoComplete="username"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                placeholder="first.last"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-              />
-            </div>
-            <div className="field">
-              <label className="field-label" htmlFor="login-pass">
-                Password
-              </label>
-              <input
-                id="login-pass"
-                className="input"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="center">Welcome, {username.trim().toLowerCase()}. Choose a password of your own to finish signing in.</p>
-            <div className="field">
-              <label className="field-label" htmlFor="login-new">
-                New password
-              </label>
-              <input
-                id="login-new"
-                className="input"
-                type="password"
-                autoComplete="new-password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                minLength={8}
-                required
-              />
-              <span className="hint">At least 8 characters, with a capital letter, a number and a symbol.</span>
-            </div>
-          </>
-        )}
-
-        {error && (
-          <p className="error center" role="alert">
-            {error}
-          </p>
-        )}
-
-        <button type="submit" className="btn btn-wide" disabled={busy}>
-          {busy ? 'One moment…' : step === 'signIn' ? 'Sign In' : 'Save and Sign In'}
-        </button>
-
-        {step === 'signIn' &&
-          (api.mode === 'sample' ? (
-            <p className="preview-note">Preview with sample data. Sign in as omar, priya.m, marco.r, sam.t or lena.k, any password.</p>
+      {view === 'demo' ? (
+        <DemoStart onSignedIn={onSignedIn} onSignInInstead={() => setView('form')} />
+      ) : (
+        <form className="login-form" onSubmit={submit}>
+          {step === 'signIn' ? (
+            <>
+              <div className="field">
+                <label className="field-label" htmlFor="login-user">
+                  Username
+                </label>
+                <input
+                  id="login-user"
+                  className="input"
+                  type="text"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  placeholder="first.last"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="field">
+                <label className="field-label" htmlFor="login-pass">
+                  Password
+                </label>
+                <input
+                  id="login-pass"
+                  className="input"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+            </>
           ) : (
-            <p className="preview-note">Forgot your password? A manager can reset it.</p>
-          ))}
-      </form>
+            <>
+              <p className="center">Welcome, {username.trim().toLowerCase()}. Choose a password of your own to finish signing in.</p>
+              <div className="field">
+                <label className="field-label" htmlFor="login-new">
+                  New password
+                </label>
+                <input
+                  id="login-new"
+                  className="input"
+                  type="password"
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  minLength={8}
+                  required
+                />
+                <span className="hint">At least 8 characters, with a capital letter, a number and a symbol.</span>
+              </div>
+            </>
+          )}
+
+          {error && (
+            <p className="error center" role="alert">
+              {error}
+            </p>
+          )}
+
+          <button type="submit" className="btn btn-wide" disabled={busy}>
+            {busy ? 'One moment…' : step === 'signIn' ? 'Sign In' : 'Save and Sign In'}
+          </button>
+
+          {step === 'signIn' &&
+            (demo ? (
+              <>
+                <p className="preview-note">Demo with sample data. Use the demo login you were given, or sign in as marco.r or sam.t with any password.</p>
+                <button type="button" className="link-btn demo-alt" onClick={() => setView('demo')}>
+                  Get a new demo login
+                </button>
+              </>
+            ) : api.mode === 'sample' ? (
+              <p className="preview-note">Preview with sample data. Sign in as omar, priya.m, marco.r, sam.t or lena.k, any password.</p>
+            ) : (
+              <p className="preview-note">Forgot your password? A manager can reset it.</p>
+            ))}
+        </form>
+      )}
+
+      {demo ? (
+        <button type="button" className="link-btn demo-alt" onClick={closeDemo}>
+          Back to the staff sign-in
+        </button>
+      ) : (
+        api.mode === 'aws' &&
+        step === 'signIn' && (
+          <div className="demo-invite">
+            <span className="caption">Not on the team? See how it works.</span>
+            <button type="button" className="btn btn-wide btn-outline" onClick={openDemo}>
+              Try the demo
+            </button>
+          </div>
+        )
+      )}
 
       <div className="login-foot" aria-hidden="true">
         {restaurants.map((r) => (

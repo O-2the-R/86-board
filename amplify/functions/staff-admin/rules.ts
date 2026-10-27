@@ -1,6 +1,8 @@
 // The rules about who may create, switch off, or reset whom, as plain
 // functions with no AWS in them. The handler asks these; the tests do too.
+import { randomInt } from 'node:crypto';
 import { RESTAURANTS, groupFor, type SeedRole } from '../../../shared/sample-data';
+import { passwordFrom, type RandomInt } from '../../../shared/logins';
 
 export const ROLES: SeedRole[] = ['manager', 'kitchen', 'server', 'host'];
 export const RESTAURANT_IDS = RESTAURANTS.map((r) => r.id);
@@ -33,10 +35,19 @@ export function actorFromIdentity(identity: { username?: string; groups?: string
   };
 }
 
-export const cleanUsername = (raw: string): string => raw.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
+// Plain-letter usernames ("josé" -> "jose") live with the other login rules.
+export { cleanUsername } from '../../../shared/logins';
 
-// Board-4821! : easy to read out over the pass, still passes the password policy.
-export const tempPassword = (random: () => number = Math.random): string => `Board-${1000 + Math.floor(random() * 9000)}!`;
+// Basil-Tray-4821! : two kitchen words, four digits, a symbol. Easy to read
+// out over the pass, hundreds of millions of possibilities, passes the
+// password policy. Node's crypto picks the words; tests pass a fixed sequence.
+export const tempPassword = (random: RandomInt = (n) => randomInt(n)): string => passwordFrom(random);
+
+// Asking which username is free is part of adding someone, so only the
+// people who can add staff may ask: the owner and managers.
+export function checkSuggest(actor: Actor): void {
+  if (!actor.isOwner && actor.managerOf.length === 0) throw new Refused('Only the owner and managers can add staff.');
+}
 
 export interface CreateInput {
   displayName: string;
