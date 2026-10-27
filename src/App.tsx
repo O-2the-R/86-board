@@ -5,6 +5,7 @@ import type { Restaurant, Session } from './types';
 import { ROLE_LABEL, canEditBoard, canManageStaff, canSeeRestaurant, isOwner } from './types';
 import { api } from './api';
 import { resetSampleData } from './api/mock';
+import { closeDemo, inDemo } from './lib/demo';
 import { readString, writeString } from './lib/storage';
 import { initials } from './lib/format';
 import { useBoard } from './hooks/useBoard';
@@ -132,6 +133,19 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
     void reloadRestaurants();
   }
 
+  // Demo: sign out first, then wipe the sample data, so the board never sees
+  // the guest disappear mid-refresh.
+  async function startOverDemo() {
+    await onSignOut();
+    resetSampleData();
+  }
+
+  async function exitDemo() {
+    await onSignOut();
+    resetSampleData();
+    closeDemo();
+  }
+
   const titles: Record<Tab, string> = {
     board: restaurant ? restaurant.name : '86 Board',
     history: 'History',
@@ -197,7 +211,19 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
           {tab === 'history' && (restaurant ? <History restaurantId={restaurant.id} refreshKey={historyKey} /> : <NoRestaurant session={session} goStaff={() => setTab('staff')} />)}
           {tab === 'staff' && manages && <Staff session={session} restaurants={restaurants} onDataChanged={() => void reloadRestaurants()} />}
 
-          {api.mode === 'sample' && (
+          {inDemo() ? (
+            <footer className="foot">
+              <p>Demo with sample restaurants. Everything you do stays on this phone. Nothing reaches a real kitchen, and no alerts are sent.</p>
+              <div className="foot-actions">
+                <button type="button" className="link-btn" style={{ paddingLeft: 0 }} onClick={() => void startOverDemo()}>
+                  Start over
+                </button>
+                <button type="button" className="link-btn" onClick={() => void exitDemo()}>
+                  Exit demo
+                </button>
+              </div>
+            </footer>
+          ) : api.mode === 'sample' && (
             <footer className="foot">
               <p>Preview with sample data. Your taps are saved on this device only. The real app shares one board across every phone.</p>
               <button type="button" className="link-btn" style={{ paddingLeft: 0 }} onClick={resetSample}>

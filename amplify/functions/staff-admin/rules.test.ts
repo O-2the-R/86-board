@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { Refused, actorFromIdentity, checkCreate, checkDeactivate, checkManage, checkRemove, cleanUsername, tempPassword, type PersonRecord } from './rules';
+import { Refused, actorFromIdentity, checkCreate, checkDeactivate, checkManage, checkRemove, checkSuggest, cleanUsername, tempPassword, type PersonRecord } from './rules';
+import { passesPolicy } from '../../../shared/logins';
+
+let calls = 0;
 
 const owner = actorFromIdentity({ username: 'omar', groups: ['owner'] });
 const mainManager = actorFromIdentity({ username: 'priya.m', groups: ['main-manager'] });
@@ -87,9 +90,30 @@ describe('usernames and temporary passwords', () => {
     expect(cleanUsername('Marco R!')).toBe('marcor');
   });
 
+  it('cleans accents into plain letters, like the app does', () => {
+    expect(cleanUsername('José.Peña')).toBe('jose.pena');
+  });
+
   it('temporary passwords pass the pool policy and read out loud', () => {
-    expect(tempPassword(() => 0)).toBe('Board-1000!');
-    expect(tempPassword(() => 0.9999)).toBe('Board-9999!');
-    expect(tempPassword()).toMatch(/^Board-\d{4}!$/);
+    expect(tempPassword((n) => [0, 0, 3821, 0][calls++ % 4] % n)).toBe('Basil-Tray-4821!');
+    for (let i = 0; i < 200; i++) {
+      const p = tempPassword(); // real randomness from Node's crypto
+      expect(p).toMatch(/^[A-Z][a-z]+-[A-Z][a-z]+-\d{4}[!?]$/);
+      expect(passesPolicy(p)).toBe(true);
+    }
+  });
+
+  it('they are not all the same', () => {
+    const seen = new Set(Array.from({ length: 50 }, () => tempPassword()));
+    expect(seen.size).toBeGreaterThan(45);
+  });
+});
+
+describe('asking for a free username', () => {
+  it('the owner and managers may ask, nobody else', () => {
+    expect(() => checkSuggest(actorFromIdentity({ username: 'omar', groups: ['owner'] }))).not.toThrow();
+    expect(() => checkSuggest(actorFromIdentity({ username: 'priya.m', groups: ['main-manager'] }))).not.toThrow();
+    expect(() => checkSuggest(actorFromIdentity({ username: 'sam.t', groups: ['main-server'] }))).toThrow(Refused);
+    expect(() => checkSuggest(actorFromIdentity({ username: 'marco.r', groups: ['main-kitchen'] }))).toThrow(Refused);
   });
 });

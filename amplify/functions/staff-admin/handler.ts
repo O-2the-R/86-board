@@ -21,7 +21,8 @@ import {
 } from '@aws-sdk/client-cognito-identity-provider';
 import type { Schema } from '../../data/resource';
 import { CLOSED_SEEDS, LOW_SEEDS, MENUS, OPEN_SEEDS, RESTAURANTS, STAFF, editorGroupsFor, groupFor, itemIdFor, readersFor } from '../../../shared/sample-data';
-import { Refused, actorFromIdentity, checkCreate, checkDeactivate, checkManage, checkRemove, cleanUsername, tempPassword, type Actor } from './rules';
+import { usernameCandidates } from '../../../shared/logins';
+import { Refused, actorFromIdentity, checkCreate, checkDeactivate, checkManage, checkRemove, checkSuggest, cleanUsername, tempPassword, type Actor } from './rules';
 
 const { resourceConfig, libraryOptions } = await getAmplifyDataClientConfig(env);
 Amplify.configure(resourceConfig, libraryOptions);
@@ -106,6 +107,16 @@ async function manageStaff(actor: Actor, args: ManageArgs) {
   const username = cleanUsername(args.username);
   if (!username) throw new Refused('Username is required.');
   const by = actor.username;
+
+  // The add-a-person form asks this while the manager types: marco.r is
+  // taken, so the first free one (marco.r2) is what the new person gets.
+  if (args.action === 'suggestUsername') {
+    checkSuggest(actor);
+    for (const candidate of usernameCandidates(username)) {
+      if (!(await userExists(candidate))) return { ok: true, username: candidate };
+    }
+    throw new Refused(`Every username from ${username} to ${username}99 is taken. Type a different one.`);
+  }
 
   if (args.action === 'create') {
     const displayName = (args.displayName ?? '').trim();

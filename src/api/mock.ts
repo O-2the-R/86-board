@@ -1,14 +1,18 @@
 // Sample mode. Everything lives in this browser's storage, so the app can be
 // tried anywhere without a backend. Sign in as any sample person (omar,
-// priya.m, marco.r, sam.t, lena.k ...) with any password.
+// priya.m, marco.r, sam.t, lena.k ...) with any password. The public demo
+// runs on this too: its made-up guest logins (guest.kitchen.4821) are the one
+// exception, and need the password the demo showed.
 import type { BoardApi, IntegrationSettings, ManageStaffInput, ManageStaffResult, SeedResult, SignInResult } from './types';
-import { newKey } from '../lib/random';
+import { newKey, randomInt } from '../lib/random';
 import type { EightySixEvent, MenuItem, Restaurant, Session, Staff } from '../types';
 import { readJSON, removeKey, writeJSON } from '../lib/storage';
 import { CLOSED_SEEDS, LOW_SEEDS, MENUS, OPEN_SEEDS, RESTAURANTS, STAFF, itemIdFor } from '../../shared/sample-data';
+import { cleanUsername, nextFreeUsername, passwordFrom } from '../../shared/logins';
 
 export const SAMPLE_KEY = 'eightysix.sample.v3';
 const SESSION_KEY = 'eightysix.sample.session';
+const GUESTS_KEY = 'eightysix.sample.guests'; // demo username -> its password
 
 interface Store {
   restaurants: Restaurant[];
@@ -93,7 +97,18 @@ function save(store: Store): void {
 
 export function resetSampleData(): void {
   removeKey(SAMPLE_KEY);
+  removeKey(GUESTS_KEY);
   memory = null;
+}
+
+// The demo's made-up login: added to the sample staff (replacing any earlier
+// guest), with its password remembered so signing in feels real.
+export function addDemoGuest(guest: Omit<Staff, 'active'>, password: string): void {
+  const store = load();
+  store.staff = store.staff.filter((p) => !p.username.startsWith('guest.'));
+  store.staff.push({ ...guest, active: true });
+  save(store);
+  writeJSON(GUESTS_KEY, { [guest.username]: password });
 }
 
 let sessionMemory: Session | null | undefined;
@@ -134,6 +149,8 @@ export const mockApi: BoardApi = {
     const u = username.trim().toLowerCase();
     const person = load().staff.find((p) => p.username === u);
     if (!person || !password) throw new Error('No account with that username. In this preview, try omar, priya.m, marco.r, sam.t or lena.k with any password.');
+    const guestPassword = readJSON<Record<string, string>>(GUESTS_KEY)?.[u];
+    if (guestPassword && guestPassword !== password) throw new Error('Incorrect username or password.');
     if (!person.active) throw new Error('This account has been switched off. Ask a manager.');
     saveSession(toSession(person));
     return { status: 'done' };
@@ -234,13 +251,20 @@ export const mockApi: BoardApi = {
   async manageStaff(input: ManageStaffInput): Promise<ManageStaffResult> {
     await wait(250);
     const store = load();
-    const username = input.username.trim().toLowerCase();
+    const username = cleanUsername(input.username);
+    if (!username) throw new Error('Username is required.');
+    const taken = (u: string) => store.staff.some((p) => p.username === u);
+    if (input.action === 'suggestUsername') {
+      const free = nextFreeUsername(username, taken);
+      if (!free) throw new Error(`Every username from ${username} to ${username}99 is taken. Type a different one.`);
+      return { ok: true, username: free };
+    }
     if (input.action === 'create') {
-      if (store.staff.some((p) => p.username === username)) throw new Error(`The username ${username} is already taken.`);
+      if (taken(username)) throw new Error(`The username ${username} is already taken.`);
       if (!input.displayName || !input.role || !input.restaurantId) throw new Error('Name, role and restaurant are required.');
       store.staff.push({ username, displayName: input.displayName.trim(), role: input.role, restaurantId: input.restaurantId, active: true });
       save(store);
-      return input.password ? { ok: true, username, passwordSet: true } : { ok: true, username, temporaryPassword: 'Board-4821!' };
+      return input.password ? { ok: true, username, passwordSet: true } : { ok: true, username, temporaryPassword: passwordFrom(randomInt) };
     }
     const p = store.staff.find((s) => s.username === username);
     if (!p) throw new Error(`No staff record for ${username}.`);
@@ -253,7 +277,7 @@ export const mockApi: BoardApi = {
     if (input.action === 'deactivate') p.active = false;
     if (input.action === 'reactivate') p.active = true;
     save(store);
-    if (input.action === 'resetPassword') return { ok: true, username, temporaryPassword: 'Board-7306!' };
+    if (input.action === 'resetPassword') return { ok: true, username, temporaryPassword: passwordFrom(randomInt) };
     return { ok: true, username, active: p.active };
   },
 
