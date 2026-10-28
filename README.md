@@ -77,8 +77,8 @@ Anyone can try the app without an account: the "Try the demo" button under the
 sign-in, or the link `…/?demo`. The visitor picks a role (kitchen, server,
 manager, owner) and gets a made-up login like `guest.kitchen.4821` from the
 same password generator. The sign-in form comes already filled in, so one tap
-on Sign In lands them on the board; nothing to copy. "Copy login" copies both
-lines at once for later, "New login" makes another.
+on Sign In lands them on the board; nothing to copy. Each line has its own
+Copy button for later, and "New login" makes another.
 
 The login exists from the moment it is shown. Typed into either sign-in box on
 the same phone, it works too (the staff page recognises the `guest.` prefix and
