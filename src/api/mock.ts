@@ -9,10 +9,12 @@ import type { EightySixEvent, MenuItem, Restaurant, Session, Staff } from '../ty
 import { readJSON, removeKey, writeJSON } from '../lib/storage';
 import { CLOSED_SEEDS, LOW_SEEDS, MENUS, OPEN_SEEDS, RESTAURANTS, STAFF, itemIdFor } from '../../shared/sample-data';
 import { cleanUsername, nextFreeUsername, passwordFrom } from '../../shared/logins';
+import { isGuestUsername } from '../lib/demo';
 
 export const SAMPLE_KEY = 'eightysix.sample.v3';
 const SESSION_KEY = 'eightysix.sample.session';
 const GUESTS_KEY = 'eightysix.sample.guests'; // demo username -> its password
+const MAX_GUESTS = 5; // demo logins kept on this phone
 
 interface Store {
   restaurants: Restaurant[];
@@ -99,17 +101,39 @@ export function resetSampleData(): void {
   removeKey(SAMPLE_KEY);
   removeKey(GUESTS_KEY);
   memory = null;
+  guestsMemory = null;
 }
 
-// The demo's made-up login: added to the sample staff (replacing any earlier
-// guest), with its password remembered so signing in feels real.
+// The demo logins made on this phone and their passwords. Kept in memory as
+// well, so the demo works where browser storage is blocked.
+let guestsMemory: Record<string, string> | null = null;
+
+function loadGuests(): Record<string, string> {
+  if (!guestsMemory) guestsMemory = readJSON<Record<string, string>>(GUESTS_KEY) ?? {};
+  return guestsMemory;
+}
+
+function saveGuests(guests: Record<string, string>): void {
+  guestsMemory = guests;
+  writeJSON(GUESTS_KEY, guests);
+}
+
+// The demo's made-up login. It exists from the moment it is shown: added to
+// the sample staff with its password remembered, so it works typed into any
+// sign-in box on this phone, not only through the demo's own button. The
+// last few are kept; older guests drop off.
 export function addDemoGuest(guest: Omit<Staff, 'active'>, password: string): void {
+  const all = { ...loadGuests(), [guest.username]: password };
+  const keep = Object.keys(all).slice(-MAX_GUESTS);
+  const kept = Object.fromEntries(keep.map((u) => [u, all[u]]));
   const store = load();
-  store.staff = store.staff.filter((p) => !p.username.startsWith('guest.'));
+  store.staff = store.staff.filter((p) => p.username !== guest.username && (!isGuestUsername(p.username) || keep.includes(p.username)));
   store.staff.push({ ...guest, active: true });
   save(store);
-  writeJSON(GUESTS_KEY, { [guest.username]: password });
+  saveGuests(kept);
 }
+
+export const demoGuestExists = (username: string): boolean => username in loadGuests();
 
 let sessionMemory: Session | null | undefined;
 
@@ -148,9 +172,13 @@ export const mockApi: BoardApi = {
     await wait(300);
     const u = username.trim().toLowerCase();
     const person = load().staff.find((p) => p.username === u);
-    if (!person || !password) throw new Error('No account with that username. In this preview, try omar, priya.m, marco.r, sam.t or lena.k with any password.');
-    const guestPassword = readJSON<Record<string, string>>(GUESTS_KEY)?.[u];
-    if (guestPassword && guestPassword !== password) throw new Error('Incorrect username or password.');
+    if (isGuestUsername(u)) {
+      // A demo login: it only exists on the phone that made it, and its password counts.
+      if (!person) throw new Error('That demo login is not on this phone. Get a new one and it comes filled in, nothing to type.');
+      if (loadGuests()[u] !== password) throw new Error('Incorrect username or password.');
+    } else if (!person || !password) {
+      throw new Error('No account with that username. In this preview, try omar, priya.m, marco.r, sam.t or lena.k with any password.');
+    }
     if (!person.active) throw new Error('This account has been switched off. Ask a manager.');
     saveSession(toSession(person));
     return { status: 'done' };

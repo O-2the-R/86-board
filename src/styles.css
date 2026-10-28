@@ -1529,20 +1529,38 @@ button.staff-row:active {
   gap: 12px;
 }
 
+.demo-login-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .demo-login-title {
   font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--paper-muted);
+  color: var(--amber);
 }
 
-.demo-login .btn-text {
-  align-self: center;
+.input-mono {
+  font-family: var(--mono);
+  font-size: 16px;
+  letter-spacing: 0.02em;
 }
 
-.demo-login .notice-pass {
-  font-size: 18px;
+.input[readonly] {
+  border-color: var(--line-2);
+  color: var(--fg);
+}
+
+.demo-login-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .demo-alt {
