@@ -4,7 +4,8 @@
 import { useState, type FormEvent } from 'react';
 import type { Restaurant } from '../types';
 import { api } from '../api';
-import { closeDemo, inDemo, openDemo } from '../lib/demo';
+import { closeDemo, inDemo, isGuestUsername, openDemo } from '../lib/demo';
+import { mockApi } from '../api/mock';
 import { DemoStart } from './DemoStart';
 
 interface Props {
@@ -27,6 +28,13 @@ export function Login({ restaurants, onSignedIn }: Props) {
     setError(null);
     setBusy(true);
     try {
+      if (step === 'signIn' && !demo && api.mode === 'aws' && isGuestUsername(username)) {
+        // A demo login typed on the staff page. Check it against this phone's
+        // demo, then open the demo already signed in. Never sent to AWS.
+        await mockApi.signIn(username, password);
+        openDemo();
+        return;
+      }
       if (step === 'signIn') {
         const res = await api.signIn(username, password);
         if (res.status === 'newPassword') setStep('newPassword');
@@ -127,7 +135,7 @@ export function Login({ restaurants, onSignedIn }: Props) {
           {step === 'signIn' &&
             (demo ? (
               <>
-                <p className="preview-note">Demo with sample data. Use the demo login you were given, or sign in as marco.r or sam.t with any password.</p>
+                <p className="preview-note">Demo with sample data. Type a demo login made on this phone, or sign in as marco.r or sam.t with any password.</p>
                 <button type="button" className="link-btn demo-alt" onClick={() => setView('demo')}>
                   Get a new demo login
                 </button>

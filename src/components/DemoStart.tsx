@@ -1,13 +1,14 @@
-// The public demo's front door. Pick a role, get a made-up login for it from
-// the same generator managers use, and explore the three sample restaurants.
-// Everything here talks to the sample data drawer directly, never to AWS.
-import { useState } from 'react';
+// The public demo's front door. Pick a role and the demo makes a login for it
+// from the same generator managers use. The login exists the moment it shows,
+// and the sign-in form comes already filled in, so there is nothing to copy:
+// one tap on Sign In and the visitor is on the board. Everything here talks
+// to the sample data drawer directly, never to AWS.
+import { useState, type FormEvent } from 'react';
 import { addDemoGuest, mockApi } from '../api/mock';
 import { DEMO_ROLES, demoUsername, type DemoRoleInfo } from '../lib/demo';
 import { randomInt } from '../lib/random';
 import { passwordFrom } from '../../shared/logins';
 import { RESTAURANTS } from '../../shared/sample-data';
-import { CopyLine } from './CopyLine';
 
 interface DemoLogin {
   info: DemoRoleInfo;
@@ -18,27 +19,48 @@ interface DemoLogin {
 const placeOf = (info: DemoRoleInfo) =>
   info.restaurantId === 'all' ? 'all three restaurants' : (RESTAURANTS.find((r) => r.id === info.restaurantId)?.name ?? info.restaurantId);
 
+// Both lines in one copy, so a phone's single clipboard is enough.
+export const demoLoginText = (username: string, password: string) => `Username: ${username}\nPassword: ${password}`;
+
 export function DemoStart({ onSignedIn, onSignInInstead }: { onSignedIn: () => void; onSignInInstead: () => void }) {
   const [login, setLogin] = useState<DemoLogin | null>(null);
   const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function pick(info: DemoRoleInfo) {
+  // Make the login and register it right away, so it also works typed into
+  // either sign-in box on this phone.
+  function make(info: DemoRoleInfo) {
+    const username = demoUsername(info.role, randomInt);
+    const password = passwordFrom(randomInt);
+    addDemoGuest({ username, displayName: 'Guest', role: info.role, restaurantId: info.restaurantId }, password);
+    setLogin({ info, username, password });
     setError(null);
-    setLogin({ info, username: demoUsername(info.role, randomInt), password: passwordFrom(randomInt) });
+    setCopied(false);
   }
 
-  async function start() {
+  async function signIn(e: FormEvent) {
+    e.preventDefault();
     if (!login) return;
     setBusy(true);
     setError(null);
     try {
-      addDemoGuest({ username: login.username, displayName: 'Guest', role: login.info.role, restaurantId: login.info.restaurantId }, login.password);
       await mockApi.signIn(login.username, login.password);
       onSignedIn();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'The demo did not start. Try again.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The demo did not start. Try again.');
       setBusy(false);
+    }
+  }
+
+  async function copy() {
+    if (!login) return;
+    try {
+      await navigator.clipboard.writeText(demoLoginText(login.username, login.password));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // the fields are selectable; the person can copy by hand
     }
   }
 
@@ -49,7 +71,7 @@ export function DemoStart({ onSignedIn, onSignInInstead }: { onSignedIn: () => v
           <p className="demo-ask">Who do you want to be?</p>
           <div className="demo-roles">
             {DEMO_ROLES.map((r) => (
-              <button key={r.role} type="button" className="demo-role" onClick={() => pick(r)}>
+              <button key={r.role} type="button" className="demo-role" onClick={() => make(r)}>
                 <span className="demo-role-name">{r.label}</span>
                 <span className="demo-role-line">{r.line}</span>
               </button>
@@ -57,25 +79,46 @@ export function DemoStart({ onSignedIn, onSignInInstead }: { onSignedIn: () => v
           </div>
         </>
       ) : (
-        <div className="notice demo-login" role="status">
-          <span className="demo-login-title">Your demo login</span>
-          <CopyLine label="Username" value={login.username} big />
-          <CopyLine label="Password" value={login.password} big />
-          <span className="caption">
-            {login.info.label} at {placeOf(login.info)}. Made just now, for this phone only.
-          </span>
+        <form className="login-form demo-login" onSubmit={signIn}>
+          <div className="demo-login-head">
+            <span className="demo-login-title">Your demo login</span>
+            <span className="caption">
+              {login.info.label} at {placeOf(login.info)}
+            </span>
+          </div>
+          <div className="field">
+            <label className="field-label" htmlFor="demo-user">
+              Username
+            </label>
+            <input id="demo-user" className="input input-mono" type="text" value={login.username} readOnly autoComplete="off" spellCheck={false} />
+          </div>
+          <div className="field">
+            <label className="field-label" htmlFor="demo-pass">
+              Password
+            </label>
+            <input id="demo-pass" className="input input-mono" type="text" value={login.password} readOnly autoComplete="off" spellCheck={false} />
+          </div>
+          <span className="hint">Already filled in. Made just now, for this phone only, by the same generator managers use.</span>
           {error && (
-            <p className="error" role="alert">
+            <p className="error center" role="alert">
               {error}
             </p>
           )}
-          <button type="button" className="btn btn-wide btn-paper" disabled={busy} onClick={start}>
-            {busy ? 'One moment…' : 'Start the demo'}
+          <button type="submit" className="btn btn-wide" disabled={busy}>
+            {busy ? 'One moment…' : 'Sign In'}
           </button>
-          <button type="button" className="btn btn-sm btn-text" onClick={() => setLogin(null)}>
-            Pick a different role
-          </button>
-        </div>
+          <div className="demo-login-actions">
+            <button type="button" className="btn btn-sm btn-outline" onClick={copy}>
+              {copied ? 'Copied both lines' : 'Copy login'}
+            </button>
+            <button type="button" className="btn btn-sm btn-outline" onClick={() => make(login.info)}>
+              New login
+            </button>
+            <button type="button" className="btn btn-sm btn-text" onClick={() => setLogin(null)}>
+              Different role
+            </button>
+          </div>
+        </form>
       )}
 
       <p className="preview-note">

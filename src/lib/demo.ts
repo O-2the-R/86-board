@@ -68,3 +68,7 @@ export const DEMO_ROLES: DemoRoleInfo[] = [
 
 // guest.kitchen.4821
 export const demoUsername = (role: DemoRole, randomInt: RandomInt): string => `guest.${role}.${1000 + randomInt(9000)}`;
+
+// Every demo login starts with "guest.", so either sign-in page can tell a
+// demo login from a real one.
+export const isGuestUsername = (username: string): boolean => /^guest\./.test(username.trim().toLowerCase());

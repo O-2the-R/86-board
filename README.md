@@ -75,8 +75,15 @@ their name in the history. Only a login that was never used can be removed.
 
 Anyone can try the app without an account: the "Try the demo" button under the
 sign-in, or the link `…/?demo`. The visitor picks a role (kitchen, server,
-manager, owner), gets a made-up login like `guest.kitchen.4821` from the same
-password generator, and explores the three sample restaurants.
+manager, owner) and gets a made-up login like `guest.kitchen.4821` from the
+same password generator. The sign-in form comes already filled in, so one tap
+on Sign In lands them on the board; nothing to copy. "Copy login" copies both
+lines at once for later, "New login" makes another.
+
+The login exists from the moment it is shown. Typed into either sign-in box on
+the same phone, it works too (the staff page recognises the `guest.` prefix and
+opens the demo with it). It only exists on the phone that made it, the last
+five are kept, and "Start over" clears them.
 
 The demo never talks to AWS. `src/lib/demo.ts` switches the data drawer to
 sample data (`src/api/mock.ts`) for that browser tab, so nothing a visitor does
