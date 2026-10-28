@@ -1,8 +1,9 @@
 // The public demo's front door. Pick a role and the demo makes a login for it
 // from the same generator managers use. The login exists the moment it shows,
 // and the sign-in form comes already filled in, so there is nothing to copy:
-// one tap on Sign In and the visitor is on the board. Everything here talks
-// to the sample data drawer directly, never to AWS.
+// one tap on Sign In and the visitor is on the board. Each line has its own
+// Copy button for later. Everything here talks to the sample data drawer
+// directly, never to AWS.
 import { useState, type FormEvent } from 'react';
 import { addDemoGuest, mockApi } from '../api/mock';
 import { DEMO_ROLES, demoUsername, type DemoRoleInfo } from '../lib/demo';
@@ -19,13 +20,10 @@ interface DemoLogin {
 const placeOf = (info: DemoRoleInfo) =>
   info.restaurantId === 'all' ? 'all three restaurants' : (RESTAURANTS.find((r) => r.id === info.restaurantId)?.name ?? info.restaurantId);
 
-// Both lines in one copy, so a phone's single clipboard is enough.
-export const demoLoginText = (username: string, password: string) => `Username: ${username}\nPassword: ${password}`;
-
 export function DemoStart({ onSignedIn, onSignInInstead }: { onSignedIn: () => void; onSignInInstead: () => void }) {
   const [login, setLogin] = useState<DemoLogin | null>(null);
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<'user' | 'pass' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Make the login and register it right away, so it also works typed into
@@ -36,7 +34,7 @@ export function DemoStart({ onSignedIn, onSignInInstead }: { onSignedIn: () => v
     addDemoGuest({ username, displayName: 'Guest', role: info.role, restaurantId: info.restaurantId }, password);
     setLogin({ info, username, password });
     setError(null);
-    setCopied(false);
+    setCopied(null);
   }
 
   async function signIn(e: FormEvent) {
@@ -53,14 +51,15 @@ export function DemoStart({ onSignedIn, onSignInInstead }: { onSignedIn: () => v
     }
   }
 
-  async function copy() {
+  // One line at a time, so it pastes straight into a sign-in box.
+  async function copy(which: 'user' | 'pass') {
     if (!login) return;
     try {
-      await navigator.clipboard.writeText(demoLoginText(login.username, login.password));
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
+      await navigator.clipboard.writeText(which === 'user' ? login.username : login.password);
+      setCopied(which);
+      window.setTimeout(() => setCopied(null), 1500);
     } catch {
-      // the fields are selectable; the person can copy by hand
+      // the field is selectable; the person can copy by hand
     }
   }
 
@@ -90,13 +89,23 @@ export function DemoStart({ onSignedIn, onSignInInstead }: { onSignedIn: () => v
             <label className="field-label" htmlFor="demo-user">
               Username
             </label>
-            <input id="demo-user" className="input input-mono" type="text" value={login.username} readOnly autoComplete="off" spellCheck={false} />
+            <div className="input-with-btn">
+              <input id="demo-user" className="input input-mono" type="text" value={login.username} readOnly autoComplete="off" spellCheck={false} />
+              <button type="button" className="btn btn-sm btn-outline" onClick={() => copy('user')} aria-label="Copy username">
+                {copied === 'user' ? 'Copied' : 'Copy'}
+              </button>
+            </div>
           </div>
           <div className="field">
             <label className="field-label" htmlFor="demo-pass">
               Password
             </label>
-            <input id="demo-pass" className="input input-mono" type="text" value={login.password} readOnly autoComplete="off" spellCheck={false} />
+            <div className="input-with-btn">
+              <input id="demo-pass" className="input input-mono" type="text" value={login.password} readOnly autoComplete="off" spellCheck={false} />
+              <button type="button" className="btn btn-sm btn-outline" onClick={() => copy('pass')} aria-label="Copy password">
+                {copied === 'pass' ? 'Copied' : 'Copy'}
+              </button>
+            </div>
           </div>
           <span className="hint">Already filled in. Made just now, for this phone only, by the same generator managers use.</span>
           {error && (
@@ -108,9 +117,6 @@ export function DemoStart({ onSignedIn, onSignInInstead }: { onSignedIn: () => v
             {busy ? 'One moment…' : 'Sign In'}
           </button>
           <div className="demo-login-actions">
-            <button type="button" className="btn btn-sm btn-outline" onClick={copy}>
-              {copied ? 'Copied both lines' : 'Copy login'}
-            </button>
             <button type="button" className="btn btn-sm btn-outline" onClick={() => make(login.info)}>
               New login
             </button>
