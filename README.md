@@ -77,6 +77,50 @@ vendor note; it was written for the staff. The draft lives in
 3. Try `priya.m` (manager, Main Street) and `sam.t` (server, Main Street) in a
    private window.
 
+## Staging: try every change before it goes live
+
+Staging is a second, complete copy of 86 Board at
+https://staging.d2w35vo1xnmx2i.amplifyapp.com, with its own logins, database
+and functions. Nothing is shared with the live board, so nothing done there
+reaches a real kitchen.
+
+How a change goes live:
+
+1. The change is a pull request, as always.
+2. Its branch is also pushed to the `staging` branch. Amplify deploys it to
+   staging in about 5 minutes, schema and all.
+3. The **staging security test** then runs by itself and shows on the pull
+   request. It signs in as demo staff on staging and checks each one can do
+   what they should and nothing more:
+   - a server cannot 86 anything, or write to the database directly
+   - kitchen cannot change another restaurant's board
+   - a server sees only their own restaurant's board, history and staff
+   - only the owner can load demo data or repair data
+   - a manager cannot switch off another restaurant's staff
+   - kitchen 86s an item: the name comes from the login, history opens, a
+     manager watching that restaurant sees it live within 5 seconds, and a
+     manager at another restaurant hears nothing
+   - only a manager can log a vendor note; back on closes history and clears it
+   - the morning report link refuses a request without the key
+4. Try the change on staging yourself, then merge. Merging is the deploy to
+   the live board.
+
+The test lives in `staging/` and runs with `npm run test:staging`. It changes
+one Main Street item on staging and puts it back.
+
+One-time setup (already done once staging exists):
+
+1. Amplify console, the 86-board app, Environment variables: add
+   `OWNER_TEMP_PASSWORD` (a temporary password for the staging owner). If the
+   console asks, set it for the `staging` branch; on main it changes nothing,
+   because the owner already exists there.
+2. Add the `staging` branch to the app. Amplify builds its own backend.
+3. Open the staging address, sign in as `omar` with that temporary password
+   and choose a new one. Then remove the variable.
+4. Staff, Load demo data. Copy the staff password it shows.
+5. GitHub, the repo's Settings, Secrets and variables, Actions: add a secret
+   named `STAGING_STAFF_PASSWORD` with that password.
+
 ## Adding people
 
 Staff, "Add a person". Name, username, role, restaurant.
@@ -158,6 +202,7 @@ person who runs them, not in the repo.
 | `src/hooks/useBoard.ts` | Keeps the board current: the live connection, the 5-second fallback, and the check that the account is still switched on. |
 | `src/lib/live.ts` | Folds pushed changes into the board, and decides how often to double-check. |
 | `src/push.ts` | The browser side of alerts: permission, subscription, install prompt. |
+| `staging/` | The security test against the staging copy, run by `.github/workflows/staging.yml`. |
 | `src/api/` | The data drawer. `aws.ts` talks to the backend; `mock.ts` is sample data in the browser; `index.ts` picks one. |
 | `src/amplify.ts` | Picks AWS when `amplify_outputs.json` exists (it does on Amplify builds), sample data otherwise. |
 | `shared/sample-data.ts` | The three restaurants, menus, sample history, low items and 60 staff, used by both modes. |
@@ -211,6 +256,9 @@ to run any time.
 - Usernames instead of email addresses, because restaurant staff should not
   need a personal email to see the board. A manager resets forgotten passwords.
 - The service worker does not cache the app. A stale board is worse than a slow one.
+- One permanent staging copy instead of a copy per pull request. Amplify only
+  builds a backend for each pull request when the repo is private, and this
+  repo is public. One staging copy is enough for one person merging.
 - Vendor notes are drafted by 86 Board and sent by a manager from their own
   email, never automatically. A supplier hears from a person they know, the
   reply goes to that person, and a wrong address or an item that came back

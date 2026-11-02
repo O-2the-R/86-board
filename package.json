@@ -13,7 +13,9 @@
     "typecheck:backend": "node scripts/env-stubs.mjs && tsc --noEmit -p amplify/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "npm run typecheck && npm run typecheck:backend && npm test",
+    "typecheck:staging": "tsc --noEmit -p staging/tsconfig.json",
+    "check": "npm run typecheck && npm run typecheck:backend && npm run typecheck:staging && npm test",
+    "test:staging": "vitest run --config vitest.staging.config.ts",
     "build": "tsc --noEmit && vite build && node scripts/make-artifact.mjs",
     "preview": "vite preview"
   },

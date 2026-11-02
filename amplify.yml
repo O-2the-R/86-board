@@ -1,8 +1,11 @@
-# Build recipe for AWS Amplify Hosting. Amplify reads this on every push to main:
+# Build recipe for AWS Amplify Hosting. Amplify reads this on every push to main
+# (and to staging):
 #   1. backend: install, type-check the app, run the tests, and only then
 #      create or update the logins, database and functions (a red test stops
 #      the stack from shipping even if someone bypasses the pull request)
-#   2. frontend: build and publish the dist folder
+#   2. frontend: build and publish the dist folder, with version.json and the
+#      backend's public settings next to it (the staging test reads both)
+# The staging branch runs the same recipe with its own backend.
 version: 1
 backend:
   phases:
@@ -19,6 +22,7 @@ frontend:
     build:
       commands:
         - npm run build
+        - node scripts/stamp-build.mjs
   artifacts:
     baseDirectory: dist
     files:
