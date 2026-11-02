@@ -1,11 +1,12 @@
-// The line under the restaurant name. "Live" while the board is fresh,
-// amber with a clock after 10 seconds, red after 30. A stale board must
-// never look live.
+// The line under the restaurant name. "Live" while the live connection is up
+// or the last load was moments ago; amber with a clock after 10 seconds
+// without either, red after 30. A stale board must never look live.
 import { useEffect, useState } from 'react';
 
 interface Props {
-  lastOk: number | null; // when the last good refresh happened
-  failing: boolean; // the most recent refresh failed
+  lastOk: number | null; // when the board was last known to be current
+  failing: boolean; // the most recent load failed
+  live?: boolean; // the live connection is up: changes arrive as they happen
 }
 
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
@@ -20,7 +21,7 @@ function agoWords(seconds: number): string {
   return h === 1 ? 'an hour ago' : `${h} hours ago`;
 }
 
-export function Freshness({ lastOk, failing }: Props) {
+export function Freshness({ lastOk, failing, live = false }: Props) {
   const [, setTick] = useState(0);
   useEffect(() => {
     const t = window.setInterval(() => setTick((n) => n + 1), 1000);
@@ -36,7 +37,8 @@ export function Freshness({ lastOk, failing }: Props) {
     );
   }
 
-  const seconds = Math.floor((Date.now() - lastOk) / 1000);
+  // Connected and the last load worked: current by definition, no clock.
+  const seconds = live && !failing ? 0 : Math.floor((Date.now() - lastOk) / 1000);
   const level = seconds > 30 ? 'bad' : seconds > 10 || failing ? 'warn' : 'ok';
   // Fresh is just "Live". The clock only starts when something is wrong.
   const text =

@@ -1,9 +1,11 @@
 // The real thing: Cognito for logins, the shared database for the board.
 // Fills the same data drawer as the sample mode, so no screen knows the difference.
-import { generateClient } from 'aws-amplify/data';
+import { CONNECTION_STATE_CHANGE, generateClient } from 'aws-amplify/data';
+import { Hub } from 'aws-amplify/utils';
 import { confirmSignIn, fetchAuthSession, getCurrentUser, signIn, signOut } from 'aws-amplify/auth';
 import type { Schema } from '../../amplify/data/resource';
-import type { BoardApi, IntegrationSettings, ManageStaffInput, ManageStaffResult, PushSubscriptionInput, RepairResult, SeedResult, SignInResult } from './types';
+import type { BoardApi, IntegrationSettings, LiveHandlers, ManageStaffInput, ManageStaffResult, PushSubscriptionInput, RepairResult, SeedResult, SignInResult } from './types';
+import { linkStateOf } from '../lib/live';
 import { REPORT_URL } from '../amplify';
 import { newKey } from '../lib/random';
 import type { EightySixEvent, ItemStatus, MenuItem, Restaurant, Role, Session, Staff, Vendor } from '../types';
@@ -57,6 +59,7 @@ const toItem = (i: Schema['MenuItem']['type']): MenuItem => ({
   lowSince: orUndef(i.lowSince),
   vendorNoteAt: orUndef(i.vendorNoteAt),
   vendorNoteBy: orUndef(i.vendorNoteBy),
+  updatedAt: orUndef(i.updatedAt),
 });
 
 const toVendor = (v: Pick<Schema['Vendor']['type'], 'id' | 'restaurantId' | 'name' | 'email'>): Vendor => ({ id: v.id, restaurantId: v.restaurantId, name: v.name, email: v.email });
@@ -182,6 +185,30 @@ export const awsApi: BoardApi = {
     return rows.map(toEvent).filter((e) => (e.endedAt ? Date.parse(e.endedAt) : now) >= cutoff);
   },
 
+  // AppSync subscriptions: the board function saves every change through the
+  // same API, so each save is pushed to every phone watching that restaurant.
+  // The server only sends a phone the items its groups may read.
+  watchItems(restaurantId: string, on: LiveHandlers) {
+    const filter = { restaurantId: { eq: restaurantId } };
+    const upsert = (i: Schema['MenuItem']['type']) => on.change({ kind: 'upsert', item: toItem(i) });
+    const failed = () => on.failed();
+    // Listen to the connection first, so its first word is not missed.
+    const stopLink = watchConnection((state) => on.link(linkStateOf(state)));
+    const m = client().models.MenuItem;
+    const subs = [
+      m.onCreate({ filter }).subscribe({ next: upsert, error: failed }),
+      m.onUpdate({ filter }).subscribe({ next: upsert, error: failed }),
+      m.onDelete({ filter }).subscribe({ next: (i) => on.change({ kind: 'remove', id: i.id }), error: failed }),
+    ];
+    // Switching restaurants reuses a connection that is already up, which
+    // announces nothing new; say where it stands now.
+    if (lastConnection) on.link(linkStateOf(lastConnection));
+    return () => {
+      stopLink();
+      for (const sub of subs) sub.unsubscribe();
+    };
+  },
+
   async listVendors(restaurantId) {
     const rows = await allPages('Loading vendors', (nextToken) => client().models.Vendor.listVendorByRestaurantId({ restaurantId }, { limit: 200, nextToken }));
     return rows.map(toVendor).sort((a, b) => a.name.localeCompare(b.name));
@@ -259,6 +286,30 @@ export const awsApi: BoardApi = {
 };
 
 const INTEGRATION_ID = 'n8n';
+
+// Amplify announces the live connection's state on its Hub, one connection
+// for all subscriptions. One listener remembers the latest state and passes
+// it on to whichever board is watching.
+let lastConnection: string | undefined;
+let hubStarted = false;
+const connectionListeners = new Set<(state: string) => void>();
+
+function watchConnection(fn: (state: string) => void): () => void {
+  if (!hubStarted) {
+    hubStarted = true;
+    Hub.listen('api', ({ payload }) => {
+      if (payload.event !== CONNECTION_STATE_CHANGE) return;
+      const state = (payload.data as { connectionState?: string } | undefined)?.connectionState;
+      if (!state) return;
+      lastConnection = state;
+      for (const l of connectionListeners) l(state);
+    });
+  }
+  connectionListeners.add(fn);
+  return () => {
+    connectionListeners.delete(fn);
+  };
+}
 
 const toIntegration = (r: Schema['Integration']['type']): IntegrationSettings => ({
   webhookUrl: r.webhookUrl ?? '',
