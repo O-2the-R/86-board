@@ -40,7 +40,7 @@ describe('86 it', () => {
   it('from available: marks it out, stamps the name, opens a history entry', () => {
     const p = plan(item(), { kind: 'out', note: 'Sold out' }, 'Marco R.', now);
     expect(p).toMatchObject({ kind: 'write', openEvent: true, closeNeeded: false, closeEventId: null });
-    expect(p.kind === 'write' && p.update).toEqual({ status: 'out', outSince: now, note: 'Sold out', markedBy: 'Marco R.', lowCount: null, lowSince: null, openEventId: null });
+    expect(p.kind === 'write' && p.update).toEqual({ status: 'out', outSince: now, note: 'Sold out', markedBy: 'Marco R.', lowCount: null, lowSince: null, openEventId: null, vendorNoteAt: null, vendorNoteBy: null });
   });
 
   it('from running low: clears the count and opens a history entry', () => {
@@ -57,7 +57,7 @@ describe('86 it', () => {
 describe('running low', () => {
   it('from available: sets the count and the time', () => {
     const p = plan(item(), { kind: 'low', count: 4 }, 'Luis H.', now);
-    expect(p.kind === 'write' && p.update).toEqual({ status: 'low', outSince: null, note: null, markedBy: 'Luis H.', lowCount: 4, lowSince: now, openEventId: null });
+    expect(p.kind === 'write' && p.update).toEqual({ status: 'low', outSince: null, note: null, markedBy: 'Luis H.', lowCount: 4, lowSince: now, openEventId: null, vendorNoteAt: null, vendorNoteBy: null });
     expect(p).toMatchObject({ openEvent: false, closeNeeded: false });
   });
 
@@ -69,7 +69,7 @@ describe('running low', () => {
   it('from 86d: a few came back, so the open history entry gets closed', () => {
     const p = plan(item({ status: 'out', openEventId: 'ev1', outSince: '2026-10-25T20:00:00.000Z' }), { kind: 'low', count: 3 }, 'Luis H.', now);
     expect(p).toMatchObject({ closeNeeded: true, closeEventId: 'ev1', openEvent: false });
-    expect(p.kind === 'write' && p.update).toMatchObject({ status: 'low', outSince: null, openEventId: null });
+    expect(p.kind === 'write' && p.update).toMatchObject({ status: 'low', outSince: null, openEventId: null, vendorNoteAt: null, vendorNoteBy: null });
   });
 
   it('from 86d without a remembered entry still asks for it to be closed', () => {
@@ -82,7 +82,7 @@ describe('back on', () => {
   it('from 86d: clears everything and closes the entry', () => {
     const p = plan(item({ status: 'out', openEventId: 'ev9', note: 'x', markedBy: 'M' }), { kind: 'back' }, 'Priya M.', now);
     expect(p).toMatchObject({ closeNeeded: true, closeEventId: 'ev9', openEvent: false });
-    expect(p.kind === 'write' && p.update).toEqual({ status: 'available', outSince: null, note: null, markedBy: null, lowCount: null, lowSince: null, openEventId: null });
+    expect(p.kind === 'write' && p.update).toEqual({ status: 'available', outSince: null, note: null, markedBy: null, lowCount: null, lowSince: null, openEventId: null, vendorNoteAt: null, vendorNoteBy: null });
   });
 
   it('from running low: nothing to close', () => {

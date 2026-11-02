@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from 'react';
 import type { MenuItem } from '../types';
 import { api } from '../api';
 import { fmtDuration, fmtTime } from '../lib/format';
+import { isLongOut, sentLine } from '../../shared/vendor-note';
+import { VendorNoteSheet } from './VendorNote';
 
 const QUICK_NOTES = ['Sold out', "Didn't come in", 'Vendor short', 'Quality, pulled', 'Back tomorrow'];
 const COUNTS = [1, 2, 3, 4, 5, 6, 8, 10];
@@ -12,17 +14,32 @@ const COUNTS = [1, 2, 3, 4, 5, 6, 8, 10];
 interface Props {
   items: MenuItem[];
   canEdit: boolean;
+  canNote: boolean; // may email vendors about items out 3+ days (manager, owner)
+  restaurantName: string;
   actor: string; // name recorded on the change
   loading: boolean;
   onChanged: () => void; // ask for a fresh board right away
+  openNote?: { itemId: string; restaurantId: string } | null; // from the morning email's link
+  onNoteHandled?: () => void;
 }
 
-export function Board({ items, canEdit, actor, loading, onChanged }: Props) {
+export function Board({ items, canEdit, canNote, restaurantName, actor, loading, onChanged, openNote, onNoteHandled }: Props) {
   const [query, setQuery] = useState('');
   const [target, setTarget] = useState<MenuItem | null>(null); // item whose sheet is open
+  const [noteFor, setNoteFor] = useState<MenuItem | null>(null); // item whose vendor note is open
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const now = Date.now();
+
+  // The morning email's "Draft the note" button lands here: open that item's
+  // note once this restaurant's board has loaded.
+  useEffect(() => {
+    if (!openNote || !items.some((i) => i.restaurantId === openNote.restaurantId)) return;
+    const it = items.find((i) => i.id === openNote.itemId);
+    if (it && it.status !== 'out') setError(`${it.name} is back on, so there is nothing to tell the vendor.`);
+    else if (it && canNote) setNoteFor(it);
+    onNoteHandled?.();
+  }, [openNote, items, canNote, onNoteHandled]);
 
   const out = useMemo(
     () => items.filter((i) => i.status === 'out').sort((a, b) => (b.outSince ?? '').localeCompare(a.outSince ?? '')),
@@ -137,6 +154,27 @@ export function Board({ items, canEdit, actor, loading, onChanged }: Props) {
                   </p>
                   {canEdit && backButton(it)}
                 </div>
+                {isLongOut(it.outSince, now) &&
+                  (it.vendorNoteAt && it.vendorNoteBy ? (
+                    <div className="ticket-vendor">
+                      <span>{sentLine(it.vendorNoteBy, it.vendorNoteAt)}</span>
+                      {canNote && (
+                        <button type="button" className="link-btn link-paper" onClick={() => setNoteFor(it)}>
+                          Open again
+                        </button>
+                      )}
+                    </div>
+                  ) : canNote ? (
+                    <div className="ticket-vendor">
+                      <span>
+                        Out 3+ days
+                        {it.vendor ? ` · ${it.vendor}` : ''}
+                      </span>
+                      <button type="button" className="btn btn-sm btn-paper-outline" onClick={() => setNoteFor(it)}>
+                        Email vendor
+                      </button>
+                    </div>
+                  ) : null)}
               </li>
             ))}
           </ul>
@@ -253,6 +291,7 @@ export function Board({ items, canEdit, actor, loading, onChanged }: Props) {
       </section>
 
       {target && <ItemSheet item={target} onCancel={() => setTarget(null)} onDecide={decide} />}
+      {noteFor && <VendorNoteSheet item={noteFor} restaurantName={restaurantName} sender={actor} onClose={() => setNoteFor(null)} onSent={onChanged} />}
     </>
   );
 }

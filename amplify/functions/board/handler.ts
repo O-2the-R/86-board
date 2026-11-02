@@ -1,13 +1,15 @@
-// Runs behind changeItem and repairData. The only code that writes to the
-// board tables, so "who may change what" and "keep the history in step"
-// live in one place and are checked on the server, not in the app.
+// Runs behind changeItem, repairData, saveVendor and logVendorNote. The only
+// code that writes to the board tables, so "who may change what" and "keep
+// the history in step" live in one place and are checked on the server, not
+// in the app.
 import type { AppSyncIdentityCognito, AppSyncResolverEvent } from 'aws-lambda';
 import { env } from '$amplify/env/board';
 import { getAmplifyDataClientConfig } from '@aws-amplify/backend/function/runtime';
 import { Amplify } from 'aws-amplify';
 import { generateClient } from 'aws-amplify/data';
 import type { Schema } from '../../data/resource';
-import { editorGroupsFor, readersFor } from '../../../shared/sample-data';
+import { editorGroupsFor, readersFor, vendorIdFor, vendorReadersFor } from '../../../shared/sample-data';
+import { canSendVendorNote, looksLikeEmail } from '../../../shared/vendor-note';
 import { Refused, canEditItem, parseAction, plan, type ItemState } from './transitions';
 
 const { resourceConfig, libraryOptions } = await getAmplifyDataClientConfig(env);
@@ -120,6 +122,48 @@ async function changeItem(actor: Actor, args: ChangeArgs) {
   return { ok: true, changed: true, item: saved.data };
 }
 
+// ---------- vendor notes ----------
+
+interface VendorArgs {
+  restaurantId: string;
+  name: string;
+  email: string;
+}
+
+// Saves a supplier's email for one restaurant. Owner anywhere, a manager at
+// their own restaurant. Saving again corrects it.
+async function saveVendor(actor: Actor, args: VendorArgs) {
+  const restaurantId = (args.restaurantId ?? '').trim();
+  const name = (args.name ?? '').trim().slice(0, 80);
+  const email = (args.email ?? '').trim().toLowerCase().slice(0, 120);
+  if (!restaurantId || !name) throw new Refused('Which restaurant and which vendor?');
+  if (!canSendVendorNote(actor.groups, restaurantId)) throw new Refused('Only a manager at this restaurant can change vendor contacts.');
+  if (!looksLikeEmail(email)) throw new Refused('That does not look like an email address. Check it and try again.');
+  const id = vendorIdFor(restaurantId, name);
+  const by = await displayNameOf(actor.username);
+  const got = await client.models.Vendor.get({ id });
+  firstError(got, 'Reading the vendor');
+  const fields = { restaurantId, name, email, updatedBy: by, readers: vendorReadersFor(restaurantId) };
+  const saved = got.data ? await client.models.Vendor.update({ id, ...fields }) : await client.models.Vendor.create({ id, ...fields });
+  firstError(saved, 'Saving the vendor');
+  return { ok: true, vendor: saved.data };
+}
+
+// The manager opened the note in their own email. The item remembers who and
+// when until it changes again, so nobody emails the same vendor twice.
+async function logVendorNote(actor: Actor, args: { itemId: string }) {
+  const got = await client.models.MenuItem.get({ id: args.itemId });
+  firstError(got, 'Finding the item');
+  const item = got.data;
+  if (!item) throw new Refused('That item is not on the menu any more.');
+  if (!canSendVendorNote(actor.groups, item.restaurantId)) throw new Refused('Only a manager at this restaurant can send vendor notes.');
+  if (item.status !== 'out') throw new Refused(`${item.name} is back on, so there is nothing to tell the vendor.`);
+  const by = await displayNameOf(actor.username);
+  const saved = await client.models.MenuItem.update({ id: item.id, vendorNoteAt: new Date().toISOString(), vendorNoteBy: by });
+  firstError(saved, 'Saving the note');
+  return { ok: true, item: saved.data };
+}
+
 // ---------- repairData ----------
 
 async function allItems() {
@@ -203,12 +247,18 @@ async function repairData(actor: Actor, args: { confirm: string }) {
 
 // ---------- entry ----------
 
-type AppEvent = AppSyncResolverEvent<Partial<ChangeArgs & { confirm: string }>>;
+type AppEvent = AppSyncResolverEvent<Partial<ChangeArgs & VendorArgs & { confirm: string }>>;
+type Operation = 'changeItem' | 'repairData' | 'saveVendor' | 'logVendorNote';
+const OPERATIONS: Operation[] = ['changeItem', 'repairData', 'saveVendor', 'logVendorNote'];
 
-function operationOf(event: AppEvent): 'changeItem' | 'repairData' {
-  const named = (event as { info?: { fieldName?: string } }).info?.fieldName;
-  if (named === 'changeItem' || named === 'repairData') return named;
-  return typeof event.arguments?.confirm === 'string' ? 'repairData' : 'changeItem';
+function operationOf(event: AppEvent): Operation {
+  const named = (event as { info?: { fieldName?: string } }).info?.fieldName as Operation | undefined;
+  if (named && OPERATIONS.includes(named)) return named;
+  const args = event.arguments ?? {};
+  if (typeof args.confirm === 'string') return 'repairData';
+  if (typeof args.email === 'string') return 'saveVendor';
+  if (typeof args.itemId === 'string' && typeof args.action !== 'string') return 'logVendorNote';
+  return 'changeItem';
 }
 
 export const handler = async (event: AppEvent) => {
@@ -219,6 +269,10 @@ export const handler = async (event: AppEvent) => {
         return await changeItem(actor, event.arguments as ChangeArgs);
       case 'repairData':
         return await repairData(actor, event.arguments as { confirm: string });
+      case 'saveVendor':
+        return await saveVendor(actor, event.arguments as VendorArgs);
+      case 'logVendorNote':
+        return await logVendorNote(actor, event.arguments as { itemId: string });
     }
   } catch (e) {
     if (e instanceof Refused) throw e;

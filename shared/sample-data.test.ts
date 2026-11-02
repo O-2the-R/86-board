@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CLOSED_SEEDS, LOW_SEEDS, MENUS, OPEN_SEEDS, RESTAURANTS, STAFF, editorGroupsFor, groupFor, itemIdFor, usernameFor } from './sample-data';
+import { CLOSED_SEEDS, LOW_SEEDS, MENUS, OPEN_SEEDS, RESTAURANTS, STAFF, VENDORS, editorGroupsFor, groupFor, itemIdFor, usernameFor } from './sample-data';
 
 describe('usernames and ids', () => {
   it('turns a display name into a login', () => {
@@ -46,5 +46,14 @@ describe('the seeded 86s point at real menu items', () => {
   it('nothing is seeded both out and running low', () => {
     const out = new Set(OPEN_SEEDS.map((s) => `${s.rest}:${s.item}`));
     for (const s of LOW_SEEDS) expect(out.has(`${s.rest}:${s.item}`)).toBe(false);
+  });
+});
+
+describe('vendor contacts', () => {
+  it('cover every supplier on every menu, with made-up .example addresses', () => {
+    const named = new Set(Object.values(MENUS).flatMap((rows) => rows.map((r) => r[2]).filter(Boolean)));
+    const known = new Set(VENDORS.map((v) => v.name));
+    for (const v of named) expect(known.has(v as string), v).toBe(true);
+    for (const v of VENDORS) expect(v.email.endsWith('.example'), v.email).toBe(true);
   });
 });

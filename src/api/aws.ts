@@ -6,7 +6,7 @@ import type { Schema } from '../../amplify/data/resource';
 import type { BoardApi, IntegrationSettings, ManageStaffInput, ManageStaffResult, PushSubscriptionInput, RepairResult, SeedResult, SignInResult } from './types';
 import { REPORT_URL } from '../amplify';
 import { newKey } from '../lib/random';
-import type { EightySixEvent, ItemStatus, MenuItem, Restaurant, Role, Session, Staff } from '../types';
+import type { EightySixEvent, ItemStatus, MenuItem, Restaurant, Role, Session, Staff, Vendor } from '../types';
 
 type Client = ReturnType<typeof generateClient<Schema>>;
 let cached: Client | null = null;
@@ -55,7 +55,11 @@ const toItem = (i: Schema['MenuItem']['type']): MenuItem => ({
   markedBy: orUndef(i.markedBy),
   lowCount: orUndef(i.lowCount),
   lowSince: orUndef(i.lowSince),
+  vendorNoteAt: orUndef(i.vendorNoteAt),
+  vendorNoteBy: orUndef(i.vendorNoteBy),
 });
+
+const toVendor = (v: Pick<Schema['Vendor']['type'], 'id' | 'restaurantId' | 'name' | 'email'>): Vendor => ({ id: v.id, restaurantId: v.restaurantId, name: v.name, email: v.email });
 
 // Follows the pages of a list until there are none, so a long menu, a busy
 // month or a big staff never gets cut off at the first page.
@@ -176,6 +180,21 @@ export const awsApi: BoardApi = {
     );
     const now = Date.now();
     return rows.map(toEvent).filter((e) => (e.endedAt ? Date.parse(e.endedAt) : now) >= cutoff);
+  },
+
+  async listVendors(restaurantId) {
+    const rows = await allPages('Loading vendors', (nextToken) => client().models.Vendor.listVendorByRestaurantId({ restaurantId }, { limit: 200, nextToken }));
+    return rows.map(toVendor).sort((a, b) => a.name.localeCompare(b.name));
+  },
+
+  async saveVendor(restaurantId, name, email) {
+    const res = await client().mutations.saveVendor({ restaurantId, name, email });
+    const out = parseJson<{ ok: boolean; vendor: Schema['Vendor']['type'] }>(check(res, 'Saving the vendor'));
+    return toVendor(out.vendor);
+  },
+
+  async logVendorNote(itemId) {
+    check(await client().mutations.logVendorNote({ itemId }), 'Recording the vendor note');
   },
 
   async listStaff() {

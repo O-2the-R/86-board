@@ -100,6 +100,14 @@ const reportUrl = pushLambda.addFunctionUrl({
 });
 backend.addOutput({ custom: { reportUrl: reportUrl.url } });
 
+// ----- Links in the morning email -----
+// The "Draft the note" buttons point at the live app. Set APP_URL on the
+// Amplify app to use a custom domain; otherwise the address is built from the
+// app id and branch that Amplify sets during every build.
+const branch = (process.env.AWS_BRANCH ?? '').replace(/[^a-zA-Z0-9-]/g, '-');
+const appUrl = process.env.APP_URL || (process.env.AWS_APP_ID && branch ? `https://${branch}.${process.env.AWS_APP_ID}.amplifyapp.com` : '');
+backend.push.addEnvironment('APP_URL', appUrl);
+
 // ----- The first owner account -----
 // On a brand-new deployment there is no way in until an owner exists. Set
 // OWNER_TEMP_PASSWORD (and optionally OWNER_USERNAME, default omar) as an
