@@ -284,6 +284,12 @@ export const mockApi: BoardApi = {
       .map((e) => ({ ...e }));
   },
 
+  // No live feed in the sample mode: the board asks every 5 seconds, and
+  // hears about changes made in another tab of the same browser.
+  watchItems() {
+    return null;
+  },
+
   async listVendors(restaurantId) {
     await wait(60);
     return (load().vendors ?? [])

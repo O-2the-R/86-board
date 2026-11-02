@@ -1,4 +1,5 @@
 import type { EightySixEvent, MenuItem, Restaurant, Session, Staff, StaffRole, Vendor } from '../types';
+import type { ItemChange, LinkState } from '../lib/live';
 
 export type ManageAction = 'create' | 'deactivate' | 'reactivate' | 'resetPassword' | 'remove' | 'suggestUsername';
 
@@ -56,6 +57,13 @@ export interface IntegrationSettings {
   lastTestResult?: string;
 }
 
+// What the live feed reports back to the board.
+export interface LiveHandlers {
+  change: (c: ItemChange) => void; // an item was added, changed or removed
+  link: (state: Exclude<LinkState, 'none'>) => void; // the connection went up or down
+  failed: () => void; // the feed stopped for good; the board starts it again later
+}
+
 // The "data drawer". The screens only talk to this.
 // Sample mode fills it from the browser (mock.ts); the real app from AWS (aws.ts).
 export interface BoardApi {
@@ -80,6 +88,10 @@ export interface BoardApi {
   // back to plenty, from low or from 86'd
   markBack(itemId: string, by: string): Promise<void>;
   listHistory(restaurantId: string, days: number): Promise<EightySixEvent[]>;
+  // Changes to one restaurant's board as they happen. Returns the function
+  // that stops listening, or null when this drawer has no live feed (the
+  // sample mode), in which case the board asks every 5 seconds instead.
+  watchItems(restaurantId: string, on: LiveHandlers): (() => void) | null;
 
   // vendor notes, for items out three days or more (owner, or a manager there)
   listVendors(restaurantId: string): Promise<Vendor[]>;

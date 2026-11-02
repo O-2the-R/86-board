@@ -154,8 +154,9 @@ person who runs them, not in the repo.
 | `shared/vendor-note.ts` | The three-day rule, the note's wording and the email link, shared by the app and the morning email. |
 | `src/components/History.tsx` | What was out, how often, for how long. |
 | `src/components/Staff.tsx` | Add a person, the person sheet (reset, switch off, remove), load demo data. |
-| `src/components/Freshness.tsx` | The line that says how old the board is. Red after 30 seconds. |
-| `src/hooks/useBoard.ts` | The 5-second refresh, plus the check that the account is still switched on. |
+| `src/components/Freshness.tsx` | The line that says how old the board is. "Live" while connected; red after 30 seconds without news. |
+| `src/hooks/useBoard.ts` | Keeps the board current: the live connection, the 5-second fallback, and the check that the account is still switched on. |
+| `src/lib/live.ts` | Folds pushed changes into the board, and decides how often to double-check. |
 | `src/push.ts` | The browser side of alerts: permission, subscription, install prompt. |
 | `src/api/` | The data drawer. `aws.ts` talks to the backend; `mock.ts` is sample data in the browser; `index.ts` picks one. |
 | `src/amplify.ts` | Picks AWS when `amplify_outputs.json` exists (it does on Amplify builds), sample data otherwise. |
@@ -195,11 +196,17 @@ to run any time.
 ## Decisions
 
 - Three boards, one login system. Each restaurant has its own menu and staff.
-- The board refreshes every 5 seconds instead of holding a live connection.
-  The freshness line makes a stale board impossible to mistake for a live one.
-  Alerts cover the gap: a phone in a pocket still hears about an 86.
+- The board holds a live connection (AppSync subscriptions). Every change the
+  board function saves is pushed to each phone watching that restaurant, and
+  the server only sends a phone the items its groups may read. An open board
+  makes one quick check every 30 seconds instead of every 5.
+- When the live connection is not up (starting, reconnecting, or a Wi-Fi that
+  blocks it), the board goes back to asking every 5 seconds, and catches up
+  once the connection returns. The freshness line follows the connection, so
+  a stale board is still impossible to mistake for a live one. Alerts cover a
+  phone in a pocket.
 - People get switched off, never deleted, so the history keeps their name.
-  A switched-off account is signed out by the app within seconds and loses
+  A switched-off account is signed out by the app within 30 seconds and loses
   API access within five minutes (tokens are short-lived).
 - Usernames instead of email addresses, because restaurant staff should not
   need a personal email to see the board. A manager resets forgotten passwords.

@@ -38,6 +38,7 @@ export interface MenuItem {
   lowSince?: string; // ISO time, set while the item is running low
   vendorNoteAt?: string; // ISO time a manager emailed the vendor about this 86
   vendorNoteBy?: string; // who did
+  updatedAt?: string; // ISO time of the last change, set by the server
 }
 
 // A supplier's contact at one restaurant, for the vendor notes.

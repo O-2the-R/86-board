@@ -132,9 +132,12 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
     void onSignOut('Your account has been switched off. Ask a manager if that is a mistake.');
   }, [onSignOut]);
 
-  const { items, lastOk, failing, loading, refresh } = useBoard(visible.some((r) => r.id === restaurantId) ? restaurantId : '', {
+  const onLiveChange = useCallback(() => setHistoryKey((k) => k + 1), []);
+
+  const { items, lastOk, failing, loading, live, refresh } = useBoard(visible.some((r) => r.id === restaurantId) ? restaurantId : '', {
     username: session.username,
     onRevoked,
+    onLiveChange,
   });
 
   const restaurant = visible.find((r) => r.id === restaurantId);
@@ -206,7 +209,7 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
       <div className="page">
         <div className="masthead">
           <h1 className="large-title">{titles[tab]}</h1>
-          {tab === 'board' && restaurant && <Freshness lastOk={lastOk} failing={failing} />}
+          {tab === 'board' && restaurant && <Freshness lastOk={lastOk} failing={failing} live={live} />}
           {tab === 'history' && restaurant && <span className="caption">{restaurant.name}</span>}
           {visible.length > 1 && (
             <div className="seg" role="tablist" aria-label="Restaurant">
