@@ -1,4 +1,4 @@
-import type { EightySixEvent, MenuItem, Restaurant, Session, Staff, StaffRole } from '../types';
+import type { EightySixEvent, MenuItem, Restaurant, Session, Staff, StaffRole, Vendor } from '../types';
 
 export type ManageAction = 'create' | 'deactivate' | 'reactivate' | 'resetPassword' | 'remove' | 'suggestUsername';
 
@@ -80,6 +80,13 @@ export interface BoardApi {
   // back to plenty, from low or from 86'd
   markBack(itemId: string, by: string): Promise<void>;
   listHistory(restaurantId: string, days: number): Promise<EightySixEvent[]>;
+
+  // vendor notes, for items out three days or more (owner, or a manager there)
+  listVendors(restaurantId: string): Promise<Vendor[]>;
+  saveVendor(restaurantId: string, name: string, email: string): Promise<Vendor>;
+  // the manager opened the note in their own email; `by` is for the sample
+  // mode only, the real app stamps the name on the server
+  logVendorNote(itemId: string, by: string): Promise<void>;
 
   // staff admin
   listStaff(): Promise<Staff[]>;

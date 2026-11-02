@@ -17,6 +17,8 @@ Live: https://main.d2w35vo1xnmx2i.amplifyapp.com
 | Kitchen | their restaurant | yes | no |
 | Server, Host | their restaurant | no | no |
 
+Vendor notes (below) are for the owner and managers only.
+
 The rules are enforced on the server, not just hidden in the app. Every item,
 history entry and staff row carries the groups allowed to read it, so a Main
 Street server's login cannot read the Waterfront board or staff list even with
@@ -36,6 +38,30 @@ Editors tap a menu item and choose "86 it" or "Running low". Both move the item
 onto a paper ticket at the top of the board, where "Back on" or "Plenty again"
 returns it.
 
+## Vendor notes: anything out three days or more
+
+When an item has been 86'd for 72 hours, it gets a second line on its ticket:
+"Out 3+ days · Chesapeake Seafood Co." and, for managers and the owner, an
+**Email vendor** button. The button opens a drafted note: the vendor's
+address (saved per restaurant; type it once and it is remembered), a subject
+and a short message asking when they can deliver or what they can send
+instead. The manager can change any of it, then taps **Open in my email**.
+
+Their own email app opens with everything filled in. Nothing is sent from
+86 Board: the manager presses Send, and the vendor's reply comes back to them.
+The ticket then reads "Vendor emailed by Priya M., Mon, Nov 2" for everyone,
+so nobody emails the same vendor twice. Once the item changes (back on,
+running low, or 86'd again), the line clears.
+
+The morning email leads with the same list, "Out 3 days or more", each with a
+**Draft the note** button that opens the app on that note. A signed-out
+manager signs in first and lands on it.
+
+The internal 86 note ("Chesapeake shorted the order") is never put in the
+vendor note; it was written for the staff. The draft lives in
+`shared/vendor-note.ts`, used by both the app and the morning email, and
+`shared/vendor-note.test.ts` proves it.
+
 ## First sign-in (owner)
 
 1. Before the first deploy of a new environment, set `OWNER_TEMP_PASSWORD`
@@ -44,8 +70,10 @@ returns it.
    live URL and sign in; the app asks for a new password before letting you
    in. Remove the variable afterwards. (The live app already has its owner.)
 2. The board is empty. Go to Staff and press "Load demo data". This creates
-   the three restaurants, their menus, a week of history and 60 staff logins,
-   and shows the one password they all share, once.
+   the three restaurants, their menus, a week of history, 60 staff logins and
+   the vendor contacts (made-up `.example` addresses), and shows the one
+   password the staff share, once. Pressing it again on an older board adds
+   anything new, such as the vendor contacts, and changes nothing else.
 3. Try `priya.m` (manager, Main Street) and `sam.t` (server, Main Street) in a
    private window.
 
@@ -122,6 +150,8 @@ person who runs them, not in the repo.
 | `src/lib/demo.ts` | Decides when this tab is the demo, and the demo roles. |
 | `src/components/Board.tsx` | The board. 86'd and running-low tickets on top, full menu below, the item sheet. |
 | `src/components/Alerts.tsx` | The bell, the nudge, and the sheet that turns alerts on or off. |
+| `src/components/VendorNote.tsx` | The vendor note sheet: address, draft, Open in my email. |
+| `shared/vendor-note.ts` | The three-day rule, the note's wording and the email link, shared by the app and the morning email. |
 | `src/components/History.tsx` | What was out, how often, for how long. |
 | `src/components/Staff.tsx` | Add a person, the person sheet (reset, switch off, remove), load demo data. |
 | `src/components/Freshness.tsx` | The line that says how old the board is. Red after 30 seconds. |
@@ -174,12 +204,14 @@ to run any time.
 - Usernames instead of email addresses, because restaurant staff should not
   need a personal email to see the board. A manager resets forgotten passwords.
 - The service worker does not cache the app. A stale board is worse than a slow one.
-- Vendor notes will be drafted by the morning email and sent by a manager with
-  one tap, never automatically.
+- Vendor notes are drafted by 86 Board and sent by a manager from their own
+  email, never automatically. A supplier hears from a person they know, the
+  reply goes to that person, and a wrong address or an item that came back
+  overnight never turns into an email nobody checked.
 
 ## Next
 
-1. Custom domain (omars86board.com) on the Amplify app.
-2. Morning email: last night's 86s and anything out more than three days.
-3. Vendor report: how often each supplier shorted us.
-4. Stale-item prompt each morning: still out, or back on?
+1. Custom domain (omars86board.com) on the Amplify app. Set `APP_URL` on the
+   Amplify app at the same time, so the morning email links to it.
+2. Vendor report: how often each supplier shorted us.
+3. Stale-item prompt each morning: still out, or back on?

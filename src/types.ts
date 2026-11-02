@@ -28,7 +28,7 @@ export interface MenuItem {
   restaurantId: string;
   name: string;
   category: string;
-  vendor?: string; // who supplies it; used later for the vendor notes
+  vendor?: string; // who supplies it; named in the vendor note
   sortOrder?: number;
   status: ItemStatus;
   outSince?: string; // ISO time, set while the item is 86'd
@@ -36,6 +36,16 @@ export interface MenuItem {
   markedBy?: string; // who 86'd it, or who marked it low
   lowCount?: number; // portions left, set while the item is running low
   lowSince?: string; // ISO time, set while the item is running low
+  vendorNoteAt?: string; // ISO time a manager emailed the vendor about this 86
+  vendorNoteBy?: string; // who did
+}
+
+// A supplier's contact at one restaurant, for the vendor notes.
+export interface Vendor {
+  id: string;
+  restaurantId: string;
+  name: string;
+  email: string;
 }
 
 // One stretch of time an item was 86'd. This is the history.
@@ -72,3 +82,6 @@ export const canEditBoard = (s: Session, restaurantId: string): boolean =>
   isOwner(s) || (s.restaurantId === restaurantId && (s.role === 'manager' || s.role === 'kitchen'));
 export const canManageStaff = (s: Session): boolean => isOwner(s) || s.role === 'manager';
 export const canSeeRestaurant = (s: Session, restaurantId: string): boolean => isOwner(s) || s.restaurantId === restaurantId;
+
+// Vendor notes: the owner anywhere, a manager at their own restaurant.
+export const canSendVendorNotes = (s: Session, restaurantId: string): boolean => isOwner(s) || (s.restaurantId === restaurantId && s.role === 'manager');

@@ -57,6 +57,8 @@ export function dayBounds(ymd: string, tz: string): { start: string; end: string
   return { start: new Date(start).toISOString(), end: new Date(end).toISOString() };
 }
 
+import { sentLine } from '../../../shared/vendor-note';
+
 // What the report needs from one history entry.
 export interface ReportEvent {
   itemName: string;
@@ -86,19 +88,100 @@ export interface ReportGroup {
   items: ReportRow[];
 }
 
+// An item that is still 86'd three days or more after it went out.
+export interface LongOutInput {
+  itemId: string;
+  restaurantId: string;
+  item: string;
+  vendor?: string | null;
+  outSince: string;
+  note?: string | null;
+  vendorNoteAt?: string | null;
+  vendorNoteBy?: string | null;
+}
+
+export interface LongOutRow {
+  restaurant: string;
+  item: string;
+  vendor: string; // '' when no vendor is on file
+  outSince: string; // "Thursday, Oct 29"
+  outFor: string; // "4d 2h"
+  note: string;
+  vendorNote: string; // "Vendor emailed by Priya M., Mon, Nov 2", or ''
+  link: string; // opens the vendor note in the app; '' when the app address is unknown
+}
+
 export interface Report {
   date: string;
   label: string;
   total: number;
   restaurants: ReportGroup[];
   rows: ReportRow[];
+  longOut: LongOutRow[];
   subject: string;
   html: string;
 }
 
+// The link in the email that opens the app on that item's vendor note.
+export function noteLink(appUrl: string, restaurantId: string, itemId: string): string {
+  if (!appUrl) return '';
+  return `${appUrl.replace(/\/+$/, '')}/?r=${encodeURIComponent(restaurantId)}&note=${encodeURIComponent(itemId)}`;
+}
+
+function longOutRows(perRestaurant: { name: string; longOut?: LongOutInput[] }[], now: number, tz: string, appUrl: string): LongOutRow[] {
+  return perRestaurant.flatMap((r) =>
+    (r.longOut ?? [])
+      .slice()
+      .sort((a, b) => a.outSince.localeCompare(b.outSince)) // longest out first
+      .map((i) => ({
+        restaurant: r.name,
+        item: i.item,
+        vendor: i.vendor ?? '',
+        outSince: fmtLong(i.outSince, tz),
+        outFor: fmtDuration(now - Date.parse(i.outSince)),
+        note: i.note ?? '',
+        vendorNote: i.vendorNoteAt && i.vendorNoteBy ? sentLine(i.vendorNoteBy, i.vendorNoteAt, tz) : '',
+        link: noteLink(appUrl, i.restaurantId, i.itemId),
+      })),
+  );
+}
+
+function longOutHtml(rows: LongOutRow[]): string {
+  if (rows.length === 0) return '';
+  const muted = 'font-size:13px;color:#6f685f';
+  return (
+    `<div style="margin:0 0 18px;padding:12px 14px;border:2px solid #d8382a;border-radius:8px;max-width:560px">` +
+    `<p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#d8382a;text-transform:uppercase;letter-spacing:.04em">Out 3 days or more · ${rows.length}</p>` +
+    rows
+      .map((r) => {
+        const action = r.vendorNote
+          ? `<span style="${muted}">${esc(r.vendorNote)}</span>`
+          : !r.vendor
+            ? `<span style="${muted}">No vendor on file for this item.</span>`
+            : r.link
+              ? `<a href="${esc(r.link)}" style="display:inline-block;margin-top:4px;padding:8px 12px;border-radius:6px;background:#1a1512;color:#f4ead8;text-decoration:none;font-size:14px;font-weight:700">Draft the note to ${esc(r.vendor)}</a>`
+              : `<span style="${muted}">Open 86 Board to draft the note to ${esc(r.vendor)}.</span>`;
+        return (
+          `<p style="margin:10px 0 0"><b>${esc(r.item)}</b> · ${esc(r.restaurant)}<br>` +
+          `<span style="${muted}">Out since ${esc(r.outSince)} (${esc(r.outFor)})${r.vendor ? ` · ${esc(r.vendor)}` : ''}</span><br>` +
+          action +
+          `</p>`
+        );
+      })
+      .join('') +
+    `</div>`
+  );
+}
+
 // Turns the day's events, already fetched per restaurant, into the report:
 // flat rows for the sheet, a subject and an HTML body for the email.
-export function buildReport(ymd: string, perRestaurant: { name: string; events: ReportEvent[] }[], now: number = Date.now(), tz = TZ): Report {
+export function buildReport(
+  ymd: string,
+  perRestaurant: { name: string; events: ReportEvent[]; longOut?: LongOutInput[] }[],
+  now: number = Date.now(),
+  tz = TZ,
+  appUrl = '',
+): Report {
   const groups: ReportGroup[] = perRestaurant.map((r) => {
     const items: ReportRow[] = r.events
       .slice()
@@ -120,11 +203,13 @@ export function buildReport(ymd: string, perRestaurant: { name: string; events: 
   const rows = groups.flatMap((g) => g.items);
   const label = fmtLong(`${ymd}T12:00:00Z`, tz);
   const count = rows.length === 0 ? "nothing was 86'd" : `${rows.length} ${rows.length === 1 ? 'item' : 'items'} 86'd`;
-  const subject = `86 Board: ${count} ${label}`;
+  const longOut = longOutRows(perRestaurant, now, tz, appUrl);
+  const subject = `86 Board: ${count} ${label}` + (longOut.length ? ` · ${longOut.length} out 3+ days` : '');
   const html =
     `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:16px;color:#1d1a16">` +
     `<p style="margin:0 0 4px;font-size:13px;color:#6f685f">86 Board, daily digest</p>` +
     `<p style="margin:0 0 16px;font-size:22px;font-weight:700">${esc(label)}: ${esc(count)}</p>` +
+    longOutHtml(longOut) +
     groups
       .map(
         (g) =>
@@ -143,7 +228,7 @@ export function buildReport(ymd: string, perRestaurant: { name: string; events: 
       )
       .join('') +
     `</div>`;
-  return { date: ymd, label, total: rows.length, restaurants: groups, rows, subject, html };
+  return { date: ymd, label, total: rows.length, restaurants: groups, rows, longOut, subject, html };
 }
 
 // The handful of DynamoDB attribute shapes the stream hands us.

@@ -5,13 +5,14 @@
 // exception, and need the password the demo showed.
 import type { BoardApi, IntegrationSettings, ManageStaffInput, ManageStaffResult, SeedResult, SignInResult } from './types';
 import { newKey, randomInt } from '../lib/random';
-import type { EightySixEvent, MenuItem, Restaurant, Session, Staff } from '../types';
+import type { EightySixEvent, MenuItem, Restaurant, Session, Staff, Vendor } from '../types';
 import { readJSON, removeKey, writeJSON } from '../lib/storage';
-import { CLOSED_SEEDS, LOW_SEEDS, MENUS, OPEN_SEEDS, RESTAURANTS, STAFF, itemIdFor } from '../../shared/sample-data';
+import { CLOSED_SEEDS, LOW_SEEDS, MENUS, OPEN_SEEDS, RESTAURANTS, STAFF, VENDORS, itemIdFor, vendorIdFor } from '../../shared/sample-data';
+import { looksLikeEmail } from '../../shared/vendor-note';
 import { cleanUsername, nextFreeUsername, passwordFrom } from '../../shared/logins';
 import { isGuestUsername } from '../lib/demo';
 
-export const SAMPLE_KEY = 'eightysix.sample.v3';
+export const SAMPLE_KEY = 'eightysix.sample.v4'; // v4: vendor contacts and two items out 3+ days
 const SESSION_KEY = 'eightysix.sample.session';
 const GUESTS_KEY = 'eightysix.sample.guests'; // demo username -> its password
 const MAX_GUESTS = 5; // demo logins kept on this phone
@@ -21,6 +22,7 @@ interface Store {
   items: MenuItem[];
   events: EightySixEvent[];
   staff: Staff[];
+  vendors: Vendor[];
 }
 
 const HOUR = 3_600_000;
@@ -74,7 +76,12 @@ function seed(): Store {
     it.markedBy = s.by;
   }
   const staff: Staff[] = [OWNER, ...STAFF.map((p) => ({ ...p, active: true }))];
-  return { restaurants: RESTAURANTS.map((r) => ({ ...r })), items, events, staff };
+  // each restaurant knows the suppliers on its own menu
+  const vendors: Vendor[] = RESTAURANTS.flatMap((r) => {
+    const onMenu = new Set(MENUS[r.id].map((row) => row[2]).filter(Boolean));
+    return VENDORS.filter((v) => onMenu.has(v.name)).map((v) => ({ id: vendorIdFor(r.id, v.name), restaurantId: r.id, name: v.name, email: v.email }));
+  });
+  return { restaurants: RESTAURANTS.map((r) => ({ ...r })), items, events, staff, vendors };
 }
 
 let memory: Store | null = null; // used when browser storage is unavailable
@@ -224,6 +231,8 @@ export const mockApi: BoardApi = {
     it.markedBy = by;
     delete it.lowCount;
     delete it.lowSince;
+    delete it.vendorNoteAt;
+    delete it.vendorNoteBy;
     store.events.unshift({ id: uid(), itemId: it.id, itemName: it.name, restaurantId: it.restaurantId, startedAt: now, note: note || undefined, markedBy: by });
     save(store);
   },
@@ -242,6 +251,8 @@ export const mockApi: BoardApi = {
     it.markedBy = by;
     delete it.outSince;
     delete it.note;
+    delete it.vendorNoteAt;
+    delete it.vendorNoteBy;
     save(store);
   },
 
@@ -258,6 +269,8 @@ export const mockApi: BoardApi = {
     delete it.markedBy;
     delete it.lowCount;
     delete it.lowSince;
+    delete it.vendorNoteAt;
+    delete it.vendorNoteBy;
     save(store);
   },
 
@@ -269,6 +282,39 @@ export const mockApi: BoardApi = {
       .events.filter((e) => e.restaurantId === restaurantId && (e.endedAt ? Date.parse(e.endedAt) : now) >= cutoff)
       .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
       .map((e) => ({ ...e }));
+  },
+
+  async listVendors(restaurantId) {
+    await wait(60);
+    return (load().vendors ?? [])
+      .filter((v) => v.restaurantId === restaurantId)
+      .map((v) => ({ ...v }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  },
+
+  async saveVendor(restaurantId, name, email) {
+    await wait();
+    const clean = { name: name.trim(), email: email.trim().toLowerCase() };
+    if (!clean.name) throw new Error('Which vendor?');
+    if (!looksLikeEmail(clean.email)) throw new Error('That does not look like an email address. Check it and try again.');
+    const store = load();
+    store.vendors ??= [];
+    const id = vendorIdFor(restaurantId, clean.name);
+    const vendor: Vendor = { id, restaurantId, ...clean };
+    store.vendors = [...store.vendors.filter((v) => v.id !== id), vendor];
+    save(store);
+    return { ...vendor };
+  },
+
+  async logVendorNote(itemId, by) {
+    await wait();
+    const store = load();
+    const it = store.items.find((i) => i.id === itemId);
+    if (!it) throw new Error('That item is not on the menu any more.');
+    if (it.status !== 'out') throw new Error(`${it.name} is back on, so there is nothing to tell the vendor.`);
+    it.vendorNoteAt = new Date().toISOString();
+    it.vendorNoteBy = by;
+    save(store);
   },
 
   async listStaff() {

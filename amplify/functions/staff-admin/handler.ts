@@ -20,7 +20,21 @@ import {
   UsernameExistsException,
 } from '@aws-sdk/client-cognito-identity-provider';
 import type { Schema } from '../../data/resource';
-import { CLOSED_SEEDS, LOW_SEEDS, MENUS, OPEN_SEEDS, RESTAURANTS, STAFF, editorGroupsFor, groupFor, itemIdFor, readersFor } from '../../../shared/sample-data';
+import {
+  CLOSED_SEEDS,
+  LOW_SEEDS,
+  MENUS,
+  OPEN_SEEDS,
+  RESTAURANTS,
+  STAFF,
+  VENDORS,
+  editorGroupsFor,
+  groupFor,
+  itemIdFor,
+  readersFor,
+  vendorIdFor,
+  vendorReadersFor,
+} from '../../../shared/sample-data';
 import { usernameCandidates } from '../../../shared/logins';
 import { Refused, actorFromIdentity, checkCreate, checkDeactivate, checkManage, checkRemove, checkSuggest, cleanUsername, tempPassword, type Actor } from './rules';
 
@@ -244,6 +258,22 @@ async function seedDemo(actor: Actor, args: SeedArgs) {
     });
     firstError(res, `Creating ${row.name}`);
     counts.items += 1;
+  });
+
+  // Vendor contacts: each restaurant gets the suppliers on its own menu.
+  // Made-up .example addresses. Added if missing, so pressing "Load demo
+  // data" again on an older board fills them in.
+  const vendorRows = RESTAURANTS.flatMap((r) => {
+    const onMenu = new Set(MENUS[r.id].map((row) => row[2]).filter(Boolean));
+    return VENDORS.filter((v) => onMenu.has(v.name)).map((v) => ({ restaurantId: r.id, ...v }));
+  });
+  await inBatches(vendorRows, 8, async (v) => {
+    const id = vendorIdFor(v.restaurantId, v.name);
+    const got = await client.models.Vendor.get({ id });
+    firstError(got, `Checking vendor ${v.name}`);
+    if (got.data) return;
+    const res = await client.models.Vendor.create({ id, restaurantId: v.restaurantId, name: v.name, email: v.email, updatedBy: 'Demo data', readers: vendorReadersFor(v.restaurantId) });
+    firstError(res, `Creating vendor ${v.name}`);
   });
 
   // History, only when the log is empty

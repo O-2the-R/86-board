@@ -28,6 +28,8 @@ export interface ItemUpdate {
   lowCount: number | null;
   lowSince: string | null;
   openEventId: string | null;
+  vendorNoteAt: string | null; // a vendor note belongs to one 86; any change clears it
+  vendorNoteBy: string | null;
 }
 
 export type Plan =
@@ -59,7 +61,17 @@ export function parseAction(args: { action: string; note?: string | null; count?
   throw new Refused(`Unknown action ${args.action}. Use out, low or back.`);
 }
 
-const cleared = (status: Status): ItemUpdate => ({ status, outSince: null, note: null, markedBy: null, lowCount: null, lowSince: null, openEventId: null });
+const cleared = (status: Status): ItemUpdate => ({
+  status,
+  outSince: null,
+  note: null,
+  markedBy: null,
+  lowCount: null,
+  lowSince: null,
+  openEventId: null,
+  vendorNoteAt: null,
+  vendorNoteBy: null,
+});
 
 export function plan(item: ItemState, action: Action, by: string, now: string): Plan {
   if (action.kind === 'out') {

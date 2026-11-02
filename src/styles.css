@@ -565,6 +565,30 @@ ol {
   flex: none;
 }
 
+/* the vendor line under a ticket that has been out three days or more */
+.ticket-vendor {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--paper-line);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--red-ink);
+}
+
+.ticket-vendor span {
+  min-width: 0;
+}
+
+.link-paper {
+  color: var(--paper-ink);
+  text-decoration: underline;
+  flex: none;
+}
+
 /* ---------- menu list ---------- */
 
 .course {
@@ -748,6 +772,13 @@ button.row:active {
   color: var(--paper);
 }
 
+/* on paper, second in line: an ink outline */
+.btn-paper-outline {
+  background: transparent;
+  color: var(--paper-ink);
+  box-shadow: inset 0 0 0 1.5px var(--paper-ink);
+}
+
 .ticket .btn-stamp {
   box-shadow: none;
 }
@@ -830,6 +861,15 @@ button.row:active {
 
 .input::placeholder {
   color: var(--faint);
+}
+
+.textarea {
+  min-height: 0;
+  padding: 12px 14px;
+  font-size: 16px;
+  line-height: 1.45;
+  resize: vertical;
+  font-family: inherit;
 }
 
 .input-count {

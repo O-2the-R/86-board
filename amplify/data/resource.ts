@@ -39,6 +39,8 @@ const schema = a
         lowCount: a.integer(), // portions left while running low
         lowSince: a.datetime(),
         openEventId: a.string(), // the history entry still open while the item is 86'd
+        vendorNoteAt: a.datetime(), // when a manager emailed the vendor about this 86
+        vendorNoteBy: a.string(), // who did, stamped from their login
         editors: a.string().array().required(), // groups allowed to change it (checked by the board function)
         readers: a.string().array(), // groups allowed to see it
       })
@@ -76,6 +78,21 @@ const schema = a
       })
       .authorization((allow) => [allow.group('owner').to(['read']), allow.groupsDefinedIn('readers').to(['read'])]),
 
+    // Where a manager emails a supplier about a long 86. One row per
+    // restaurant and supplier (id "main-capital-meats"). The owner and that
+    // restaurant's managers read it; only the board function writes it,
+    // behind saveVendor.
+    Vendor: a
+      .model({
+        restaurantId: a.string().required(),
+        name: a.string().required(),
+        email: a.string().required(),
+        updatedBy: a.string(),
+        readers: a.string().array(),
+      })
+      .secondaryIndexes((index) => [index('restaurantId')])
+      .authorization((allow) => [allow.group('owner').to(['read']), allow.groupsDefinedIn('readers').to(['read'])]),
+
     // The only way the board changes. action: out | low | back.
     // The board function checks the caller may edit that restaurant, stamps
     // who did it, and keeps the history entry in step with the item.
@@ -87,6 +104,28 @@ const schema = a
         note: a.string(),
         count: a.integer(),
       })
+      .returns(a.json())
+      .authorization((allow) => [allow.authenticated()])
+      .handler(a.handler.function(board)),
+
+    // Saves or corrects a supplier's email address. The board function lets
+    // the owner do it anywhere and a manager at their own restaurant.
+    saveVendor: a
+      .mutation()
+      .arguments({
+        restaurantId: a.string().required(),
+        name: a.string().required(),
+        email: a.string().required(),
+      })
+      .returns(a.json())
+      .authorization((allow) => [allow.authenticated()])
+      .handler(a.handler.function(board)),
+
+    // A manager opened the vendor note for a long 86 in their own email.
+    // Stamps who and when on the item; nothing is sent from here.
+    logVendorNote: a
+      .mutation()
+      .arguments({ itemId: a.string().required() })
       .returns(a.json())
       .authorization((allow) => [allow.authenticated()])
       .handler(a.handler.function(board)),

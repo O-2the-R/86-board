@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TZ, buildReport, changeOf, dayBounds, fmtDuration, pushMessage, yesterdayIn, type Image } from './report';
+import { TZ, buildReport, changeOf, dayBounds, fmtDuration, noteLink, pushMessage, yesterdayIn, type Image, type LongOutInput } from './report';
 
 describe('restaurant-time day boundaries', () => {
   it('covers a normal day in Eastern Daylight Time', () => {
@@ -89,6 +89,60 @@ describe('the morning report', () => {
     expect(r.html).toContain('Tuna &lt;Crudo&gt;');
     expect(r.html).toContain('A &amp; B');
     expect(r.html).not.toContain('<Crudo>');
+  });
+});
+
+describe('out three days or more', () => {
+  const now = Date.parse('2026-11-02T14:00:00Z'); // Mon Nov 2, 9 AM Washington
+  const APP = 'https://main.example.amplifyapp.com/';
+  const branzino: LongOutInput = {
+    itemId: 'main-whole-branzino',
+    restaurantId: 'main',
+    item: 'Whole Branzino',
+    vendor: 'Chesapeake Seafood Co.',
+    outSince: '2026-10-29T22:00:00Z',
+    note: "Didn't come in",
+  };
+  const swordfish: LongOutInput = { itemId: 'water-grilled-swordfish', restaurantId: 'water', item: 'Grilled Swordfish', vendor: 'Chesapeake Seafood Co.', outSince: '2026-10-28T20:00:00Z' };
+
+  it('leads the email with them, longest out first, with a button that opens the note', () => {
+    const r = buildReport('2026-11-01', [{ name: 'Main Street', events: [], longOut: [branzino] }, { name: 'Waterfront', events: [], longOut: [swordfish] }], now, TZ, APP);
+    expect(r.subject).toBe("86 Board: nothing was 86'd Sunday, Nov 1 · 2 out 3+ days");
+    expect(r.longOut.map((x) => x.item)).toEqual(['Whole Branzino', 'Grilled Swordfish']);
+    expect(r.longOut[0]).toMatchObject({ restaurant: 'Main Street', vendor: 'Chesapeake Seafood Co.', outSince: 'Thursday, Oct 29', outFor: '3d 16h', vendorNote: '' });
+    expect(r.longOut[0].link).toBe('https://main.example.amplifyapp.com/?r=main&note=main-whole-branzino');
+    expect(r.html).toContain('Out 3 days or more · 2');
+    expect(r.html).toContain('Draft the note to Chesapeake Seafood Co.');
+    expect(r.html).toContain('href="https://main.example.amplifyapp.com/?r=main&amp;note=main-whole-branzino"');
+    expect(r.html.indexOf('Out 3 days or more')).toBeLessThan(r.html.indexOf('Main Street · 0'));
+  });
+
+  it('says who already emailed the vendor instead of offering it again', () => {
+    const sent = { ...branzino, vendorNoteAt: '2026-10-31T15:00:00Z', vendorNoteBy: 'Priya M.' };
+    const r = buildReport('2026-11-01', [{ name: 'Main Street', events: [], longOut: [sent] }], now, TZ, APP);
+    expect(r.longOut[0].vendorNote).toBe('Vendor emailed by Priya M., Sat, Oct 31');
+    expect(r.html).toContain('Vendor emailed by Priya M., Sat, Oct 31');
+    expect(r.html).not.toContain('Draft the note');
+  });
+
+  it('says when an item has no vendor, and when the app address is unknown', () => {
+    const noVendor = { ...branzino, vendor: null };
+    expect(buildReport('2026-11-01', [{ name: 'Main Street', events: [], longOut: [noVendor] }], now, TZ, APP).html).toContain('No vendor on file for this item.');
+    const noApp = buildReport('2026-11-01', [{ name: 'Main Street', events: [], longOut: [branzino] }], now, TZ, '');
+    expect(noApp.longOut[0].link).toBe('');
+    expect(noApp.html).toContain('Open 86 Board to draft the note to Chesapeake Seafood Co.');
+  });
+
+  it('leaves the email as it was when nothing is out that long', () => {
+    const r = buildReport('2026-11-01', [{ name: 'Main Street', events: [], longOut: [] }], now, TZ, APP);
+    expect(r.longOut).toEqual([]);
+    expect(r.subject).toBe("86 Board: nothing was 86'd Sunday, Nov 1");
+    expect(r.html).not.toContain('Out 3 days or more');
+  });
+
+  it('builds the app link safely', () => {
+    expect(noteLink('https://app.example/', 'main', 'main-fish-&-chips')).toBe('https://app.example/?r=main&note=main-fish-%26-chips');
+    expect(noteLink('', 'main', 'x')).toBe('');
   });
 });
 

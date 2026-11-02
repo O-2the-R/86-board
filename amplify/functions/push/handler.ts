@@ -16,7 +16,8 @@ import { generateClient } from 'aws-amplify/data';
 import webpush from 'web-push';
 import type { Schema } from '../../data/resource';
 import { RESTAURANTS } from '../../../shared/sample-data';
-import { TZ, buildReport, changeOf, dayBounds, esc, fmtDate, fmtLong, fmtTime, pushMessage, str, yesterdayIn, type Image, type ReportEvent } from './report';
+import { TZ, buildReport, changeOf, dayBounds, esc, fmtDate, fmtLong, fmtTime, pushMessage, str, yesterdayIn, type Image, type LongOutInput, type ReportEvent } from './report';
+import { isLongOut } from '../../../shared/vendor-note';
 
 const { resourceConfig, libraryOptions } = await getAmplifyDataClientConfig(env);
 Amplify.configure(resourceConfig, libraryOptions);
@@ -303,14 +304,41 @@ async function eventsFor(restaurantId: string, start: string, end: string): Prom
   return out;
 }
 
+// Items still 86'd three days or more after they went out, as of now.
+async function longOutFor(restaurantId: string, now: number): Promise<LongOutInput[]> {
+  const out: LongOutInput[] = [];
+  let nextToken: string | null | undefined;
+  do {
+    const res = await client.models.MenuItem.listMenuItemByRestaurantId({ restaurantId }, { limit: 500, nextToken: nextToken ?? undefined });
+    firstError(res, `Reading the board for ${restaurantId}`);
+    for (const i of res.data) {
+      if (i.status !== 'out' || !i.outSince || !isLongOut(i.outSince, now)) continue;
+      out.push({
+        itemId: i.id,
+        restaurantId: i.restaurantId,
+        item: i.name,
+        vendor: i.vendor,
+        outSince: i.outSince,
+        note: i.note,
+        vendorNoteAt: i.vendorNoteAt,
+        vendorNoteBy: i.vendorNoteBy,
+      });
+    }
+    nextToken = res.nextToken;
+  } while (nextToken);
+  return out;
+}
+
 async function report(ymd: string) {
   const { start, end } = dayBounds(ymd, TZ);
+  const now = Date.now();
   const restaurants = await client.models.Restaurant.list({ limit: 50 });
   firstError(restaurants, 'Listing restaurants');
   const sorted = restaurants.data.slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   const perRestaurant = [];
-  for (const r of sorted) perRestaurant.push({ name: r.name, events: await eventsFor(r.id, start, end) });
-  return buildReport(ymd, perRestaurant);
+  for (const r of sorted) perRestaurant.push({ name: r.name, events: await eventsFor(r.id, start, end), longOut: await longOutFor(r.id, now) });
+  // APP_URL is set in backend.ts: the live app, so the email can link straight to a vendor note.
+  return buildReport(ymd, perRestaurant, now, TZ, process.env.APP_URL ?? '');
 }
 
 // The Function URL. GET /report?date=YYYY-MM-DD (default: yesterday), with

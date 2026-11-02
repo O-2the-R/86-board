@@ -2,7 +2,7 @@
 // sections (Board, History, Staff). The login decides what you can touch.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Restaurant, Session } from './types';
-import { ROLE_LABEL, canEditBoard, canManageStaff, canSeeRestaurant, isOwner } from './types';
+import { ROLE_LABEL, canEditBoard, canManageStaff, canSeeRestaurant, canSendVendorNotes, isOwner } from './types';
 import { api } from './api';
 import { resetSampleData } from './api/mock';
 import { closeDemo, inDemo } from './lib/demo';
@@ -91,6 +91,12 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
   const [tab, setTab] = useState<Tab>('board');
   const [historyKey, setHistoryKey] = useState(0);
   const alerts = useAlerts(session.username);
+  // The morning email links to /?r=main&note=<item>: open that item's vendor note.
+  const [noteLink, setNoteLink] = useState<{ itemId: string; restaurantId: string } | null>(() => {
+    const q = new URLSearchParams(window.location.search);
+    const itemId = q.get('note');
+    return itemId ? { itemId, restaurantId: q.get('r') ?? '' } : null;
+  });
 
   // Land on the first restaurant this person can see.
   useEffect(() => {
@@ -101,6 +107,26 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
   useEffect(() => {
     if (restaurantId) writeString(storageKey, restaurantId);
   }, [restaurantId, storageKey]);
+
+  // Follow the email link to the right restaurant's board.
+  useEffect(() => {
+    if (!noteLink) return;
+    setTab('board');
+    if (noteLink.restaurantId && visible.some((r) => r.id === noteLink.restaurantId)) setRestaurantId(noteLink.restaurantId);
+  }, [noteLink, visible]);
+
+  // Once handled, take the link out of the address so a refresh does not reopen it.
+  const clearNoteLink = useCallback(() => {
+    setNoteLink(null);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('note');
+      url.searchParams.delete('r');
+      window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+    } catch {
+      // the address bar keeps the link; harmless
+    }
+  }, []);
 
   const onRevoked = useCallback(() => {
     void onSignOut('Your account has been switched off. Ask a manager if that is a mistake.');
@@ -204,7 +230,17 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
           {tab === 'board' && restaurant && <AlertsNudge state={alerts.state} onOpen={() => alerts.setOpen(true)} />}
           {tab === 'board' &&
             (restaurant ? (
-              <Board items={items} canEdit={canEdit} actor={session.displayName} loading={loading} onChanged={onChanged} />
+              <Board
+                items={items}
+                canEdit={canEdit}
+                canNote={canSendVendorNotes(session, restaurant.id)}
+                restaurantName={restaurant.name}
+                actor={session.displayName}
+                loading={loading}
+                onChanged={onChanged}
+                openNote={noteLink ? { itemId: noteLink.itemId, restaurantId: noteLink.restaurantId || restaurant.id } : null}
+                onNoteHandled={clearNoteLink}
+              />
             ) : (
               <NoRestaurant session={session} goStaff={() => setTab('staff')} />
             ))}

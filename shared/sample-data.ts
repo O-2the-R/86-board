@@ -92,6 +92,9 @@ export interface ClosedSeed extends OpenSeed {
 export const OPEN_SEEDS: OpenSeed[] = [
   { rest: 'main', item: 'Pan-Roasted Halibut', hoursAgo: 3.1, note: 'Chesapeake shorted the order, back Tuesday', by: 'Marco R.' },
   { rest: 'main', item: 'Burrata & Peach', hoursAgo: 0.7, note: 'Sold out', by: 'Marco R.' },
+  // out three days or more: shows the vendor note
+  { rest: 'main', item: 'Whole Branzino', hoursAgo: 78, note: "Didn't come in", by: 'Marco R.' },
+  { rest: 'water', item: 'Grilled Swordfish', hoursAgo: 96, note: 'Vendor short', by: 'Dev P.' },
   { rest: 'water', item: 'Oysters, West Coast', hoursAgo: 27, note: "Didn't come in", by: 'Dev P.' },
   { rest: 'counter', item: 'Cold Brew', hoursAgo: 2.2, note: 'Machine down', by: 'Alex J.' },
 ];
@@ -187,3 +190,19 @@ export const readerGroupsFor = (restaurantId: string): string[] => ALL_ROLES.map
 
 // Owner rows (restaurantId 'all') are the owner's alone.
 export const readersFor = (restaurantId: string): string[] => (restaurantId === 'all' ? ['owner'] : readerGroupsFor(restaurantId));
+
+// Who supplies what, and where a manager emails them about a long 86. Made-up
+// addresses on the reserved .example domain, so nothing real is ever mailed.
+export const VENDORS: { name: string; email: string }[] = [
+  { name: 'Chesapeake Seafood Co.', email: 'orders@chesapeake-seafood.example' },
+  { name: 'Blue Ridge Produce', email: 'orders@blueridge-produce.example' },
+  { name: 'Capital Meats', email: 'orders@capital-meats.example' },
+  { name: 'Metro Bakery', email: 'orders@metro-bakery.example' },
+  { name: 'Potomac Wine & Spirits', email: 'orders@potomac-wine.example' },
+];
+
+// One vendor row per restaurant and supplier: "main-chesapeake-seafood-co".
+export const vendorIdFor = (restaurantId: string, name: string): string => `${restaurantId}-${slug(name)}`;
+
+// Vendor contacts are for the restaurant's managers (and the owner, by group).
+export const vendorReadersFor = (restaurantId: string): string[] => [groupFor(restaurantId, 'manager')];

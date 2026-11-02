@@ -52,3 +52,38 @@ describe('demo logins', () => {
     await expect(mockApi.signIn('guest.manager.2222', 'Mint-Dill-2222!')).rejects.toThrow('not on this phone');
   });
 });
+
+describe('vendor notes in the sample data', () => {
+  it('knows each restaurant’s suppliers, with made-up addresses', async () => {
+    const main = await mockApi.listVendors('main');
+    expect(main.map((v) => v.name)).toContain('Chesapeake Seafood Co.');
+    expect(main.every((v) => v.email.endsWith('.example'))).toBe(true);
+    const counter = await mockApi.listVendors('counter');
+    expect(counter.map((v) => v.name)).not.toContain('Chesapeake Seafood Co.'); // not on its menu
+  });
+
+  it('starts with items out three days or more, so the note can be tried', async () => {
+    const items = await mockApi.listItems('main');
+    const branzino = items.find((i) => i.name === 'Whole Branzino');
+    expect(branzino?.status).toBe('out');
+    expect(Date.now() - Date.parse(branzino!.outSince!)).toBeGreaterThan(72 * 3_600_000);
+  });
+
+  it('saves a corrected address and refuses a typo', async () => {
+    await mockApi.saveVendor('main', 'Capital Meats', ' Orders@New-Butcher.example ');
+    expect((await mockApi.listVendors('main')).find((v) => v.name === 'Capital Meats')?.email).toBe('orders@new-butcher.example');
+    await expect(mockApi.saveVendor('main', 'Capital Meats', 'orders at butcher')).rejects.toThrow('does not look like an email');
+  });
+
+  it('records who emailed the vendor, and forgets it when the item changes', async () => {
+    const id = 'main-whole-branzino';
+    await mockApi.logVendorNote(id, 'Priya M.');
+    let it = (await mockApi.listItems('main')).find((i) => i.id === id)!;
+    expect(it.vendorNoteBy).toBe('Priya M.');
+    expect(it.vendorNoteAt).toBeTruthy();
+    await mockApi.markBack(id, 'Marco R.');
+    it = (await mockApi.listItems('main')).find((i) => i.id === id)!;
+    expect(it.vendorNoteAt).toBeUndefined();
+    await expect(mockApi.logVendorNote(id, 'Priya M.')).rejects.toThrow('back on');
+  });
+});
