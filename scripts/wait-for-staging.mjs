@@ -7,7 +7,8 @@ if (!url || !want) {
   console.error('STAGING_URL and GITHUB_SHA must be set.');
   process.exit(1);
 }
-const end = Date.now() + 30 * 60_000;
+const started = Date.now();
+const end = started + 30 * 60_000;
 let last = '';
 while (Date.now() < end) {
   try {
@@ -16,6 +17,11 @@ while (Date.now() < end) {
       const v = await res.json();
       if (v.commit === want) {
         console.log(`Staging is live on ${want.slice(0, 7)}.`);
+        process.exit(0);
+      }
+      // A build that could not name its commit counts if it finished after this run began.
+      if (!/^[0-9a-f]{40}$/.test(String(v.commit)) && Date.parse(v.builtAt) > started) {
+        console.log(`Staging finished a build at ${v.builtAt} without naming its commit; testing it.`);
         process.exit(0);
       }
       const now = `Staging is on ${String(v.commit).slice(0, 7)}; waiting for ${want.slice(0, 7)}…`;
