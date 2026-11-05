@@ -1,0 +1,35 @@
+# The security test against the staging copy. Every push to the staging
+# branch: wait for Amplify to deploy that exact commit, then sign in as demo
+# staff and check each one can do what they should and nothing more (the test
+# Ryan ran by hand). The result shows on that commit, so it shows on the pull
+# request whose branch was pushed to staging.
+name: staging
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+concurrency:
+  group: staging
+  cancel-in-progress: true
+
+jobs:
+  security:
+    name: staging security test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      STAGING_URL: ${{ vars.STAGING_URL || 'https://staging.d2w35vo1xnmx2i.amplifyapp.com' }}
+      STAGING_STAFF_PASSWORD: ${{ secrets.STAGING_STAFF_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Wait for Amplify to deploy this commit to staging
+        run: node scripts/wait-for-staging.mjs
+      - name: Security test against staging
+        run: npm run test:staging

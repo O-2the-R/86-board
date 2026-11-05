@@ -22,4 +22,5 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run typecheck:backend
+      - run: npm run typecheck:staging
       - run: npm test
