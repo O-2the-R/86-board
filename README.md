@@ -266,6 +266,8 @@ to run any time.
 
 ## Next
 
+The big one is self-serve: restaurants, menus and roles as data, so a new owner can sign up without a code change. The plan is in [`docs/self-serve-plan.md`](docs/self-serve-plan.md), for review before any code.
+
 1. Custom domain (omars86board.com) on the Amplify app. Set `APP_URL` on the
    Amplify app at the same time, so the morning email links to it.
 2. Vendor report: how often each supplier shorted us.
