@@ -1,17 +1,21 @@
 // What was out, how often, for how long. The bars on top are the summary a
 // manager shows the chef; the log underneath is the proof.
 import { useEffect, useMemo, useState } from 'react';
-import type { EightySixEvent } from '../types';
+import type { EightySixEvent, MenuItem } from '../types';
 import { api } from '../api';
 import { fmtDay, fmtDuration, fmtTime } from '../lib/format';
+import { VendorReport } from './VendorReport';
 
 interface Props {
   restaurantId: string;
   refreshKey: number; // bumps after every change on the board
+  items: MenuItem[]; // the board's items: they name each item's vendor
+  showVendors: boolean; // the vendor report is for managers and the owner
 }
 
-export function History({ restaurantId, refreshKey }: Props) {
+export function History({ restaurantId, refreshKey, items, showVendors }: Props) {
   const [events, setEvents] = useState<EightySixEvent[] | null>(null);
+  const [eventsFor, setEventsFor] = useState<string | null>(null); // the restaurant the loaded history belongs to
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -19,7 +23,11 @@ export function History({ restaurantId, refreshKey }: Props) {
     setError(null);
     api
       .listHistory(restaurantId, 30)
-      .then((list) => live && setEvents(list))
+      .then((list) => {
+        if (!live) return;
+        setEvents(list);
+        setEventsFor(restaurantId);
+      })
       .catch((e: unknown) => {
         if (!live) return;
         setEvents([]);
@@ -58,6 +66,9 @@ export function History({ restaurantId, refreshKey }: Props) {
   if (events === null) return <p className="caption center">Loading the history…</p>;
 
   const maxMs = top[0]?.ms ?? 1;
+  // The vendor report needs this restaurant's history and this restaurant's
+  // menu. Right after a switch one of them can still be the last restaurant's.
+  const vendorsReady = showVendors && eventsFor === restaurantId && items.some((i) => i.restaurantId === restaurantId);
 
   return (
     <>
@@ -98,6 +109,8 @@ export function History({ restaurantId, refreshKey }: Props) {
           )}
         </div>
       </section>
+
+      {vendorsReady && <VendorReport events={events} items={items} />}
 
       {days.length > 0 && (
         <section className="sec" aria-labelledby="log-heading">

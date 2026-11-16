@@ -126,6 +126,11 @@ export const CLOSED_SEEDS: ClosedSeed[] = [
   { rest: 'water', item: 'Seared Scallops', hoursAgo: 170, hours: 3, note: 'Quality, pulled', by: 'Dev P.', clearedBy: 'Dev P.' },
   { rest: 'counter', item: 'Cold Brew', hoursAgo: 96, hours: 5, note: 'Machine down', by: 'Alex J.', clearedBy: 'Alex J.' },
   { rest: 'counter', item: 'Falafel Bowl', hoursAgo: 30, hours: 1, note: 'Sold out', by: 'Alex J.', clearedBy: 'Alex J.' },
+  // short deliveries from other suppliers, so the vendor report has more than one name to rank
+  { rest: 'main', item: 'Ribeye 16 oz', hoursAgo: 290, hours: 20, note: 'Vendor short', by: 'Marco R.', clearedBy: 'Priya M.' },
+  { rest: 'main', item: 'Tiramisu', hoursAgo: 340, hours: 18, note: "Didn't come in", by: 'Luis H.', clearedBy: 'Marco R.' },
+  { rest: 'water', item: 'Truffle Fries', hoursAgo: 260, hours: 5, note: 'Vendor short', by: 'Yusuf E.', clearedBy: 'Dev P.' },
+  { rest: 'counter', item: 'Italian Sub', hoursAgo: 200, hours: 6, note: "Didn't come in", by: 'Alex J.', clearedBy: 'Alex J.' },
 ];
 
 export interface SeedStaff {

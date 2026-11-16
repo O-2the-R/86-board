@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { addDemoGuest, demoGuestExists, mockApi, resetSampleData } from './mock';
+import { vendorReport } from '../../shared/vendor-report';
 
 // No browser storage here, so the sample data lives in memory, exactly as it
 // does in a browser that blocks storage.
@@ -85,5 +86,32 @@ describe('vendor notes in the sample data', () => {
     it = (await mockApi.listItems('main')).find((i) => i.id === id)!;
     expect(it.vendorNoteAt).toBeUndefined();
     await expect(mockApi.logVendorNote(id, 'Priya M.')).rejects.toThrow('back on');
+  });
+});
+
+describe('the vendor report in the sample data', () => {
+  const reportFor = async (restaurantId: string) => vendorReport(await mockApi.listHistory(restaurantId, 30), await mockApi.listItems(restaurantId));
+
+  it('ranks Main Street’s suppliers, the fish house first', async () => {
+    const report = await reportFor('main');
+    expect(report.vendors.map((v) => v.vendor)).toEqual(['Chesapeake Seafood Co.', 'Capital Meats', 'Metro Bakery']);
+    const fish = report.vendors[0];
+    expect(fish.times).toBe(4); // halibut twice, branzino, lobster ravioli
+    expect(fish.items[0]).toEqual({ name: 'Pan-Roasted Halibut', times: 2 });
+    expect(fish.stillOut).toBe(2); // halibut and branzino are out right now
+    expect(report.noVendor).toBe(0);
+  });
+
+  it('has something to show at every restaurant', async () => {
+    expect((await reportFor('water')).vendors.map((v) => v.vendor)).toEqual(['Chesapeake Seafood Co.', 'Blue Ridge Produce']);
+    expect((await reportFor('counter')).vendors.map((v) => v.vendor)).toEqual(['Metro Bakery']);
+  });
+
+  it('follows the board: a new 86 for a short delivery is counted at once', async () => {
+    await mockApi.markOut('counter-steak-bowl', 'Vendor short', 'Diego M.');
+    const report = await reportFor('counter');
+    // one time each, so the longer time off the menu (the bakery's six hours) stays on top
+    expect(report.vendors.map((v) => `${v.vendor} ${v.times}`)).toEqual(['Metro Bakery 1', 'Capital Meats 1']);
+    expect(report.vendors.find((v) => v.vendor === 'Capital Meats')?.stillOut).toBe(1);
   });
 });
