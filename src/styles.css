@@ -1138,6 +1138,22 @@ button.row:active {
   background: var(--red);
 }
 
+/* the vendor report: the same bars in amber, with what was affected underneath */
+.bar-fill-vendor {
+  background: var(--amber);
+}
+
+.bar-sub {
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.bar-flag {
+  color: var(--red);
+  font-weight: 600;
+}
+
 .log-time {
   font-size: 13px;
   color: var(--fg-2);

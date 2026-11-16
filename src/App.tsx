@@ -247,7 +247,12 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
             ) : (
               <NoRestaurant session={session} goStaff={() => setTab('staff')} />
             ))}
-          {tab === 'history' && (restaurant ? <History restaurantId={restaurant.id} refreshKey={historyKey} /> : <NoRestaurant session={session} goStaff={() => setTab('staff')} />)}
+          {tab === 'history' &&
+            (restaurant ? (
+              <History restaurantId={restaurant.id} refreshKey={historyKey} items={items} showVendors={canSendVendorNotes(session, restaurant.id)} />
+            ) : (
+              <NoRestaurant session={session} goStaff={() => setTab('staff')} />
+            ))}
           {tab === 'staff' && manages && <Staff session={session} restaurants={restaurants} onDataChanged={() => void reloadRestaurants()} />}
 
           {inDemo() ? (

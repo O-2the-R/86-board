@@ -17,7 +17,7 @@ Live: https://main.d2w35vo1xnmx2i.amplifyapp.com
 | Kitchen | their restaurant | yes | no |
 | Server, Host | their restaurant | no | no |
 
-Vendor notes (below) are for the owner and managers only.
+Vendor notes and the vendor report (below) are for the owner and managers only.
 
 The rules are enforced on the server, not just hidden in the app. Every item,
 history entry and staff row carries the groups allowed to read it, so a Main
@@ -61,6 +61,28 @@ The internal 86 note ("Chesapeake shorted the order") is never put in the
 vendor note; it was written for the staff. The draft lives in
 `shared/vendor-note.ts`, used by both the app and the morning email, and
 `shared/vendor-note.test.ts` proves it.
+
+## Vendor report: who left us short
+
+History has a second set of bars for managers and the owner: **Shorted by
+vendor**, last 30 days. One line per supplier, the worst on top:
+
+- how many times an item was 86'd because the delivery was short, late or
+  did not come in
+- how long those items were off the menu, added up
+- which items, the last time it happened, and how many are still out now
+
+It is the page a manager opens before calling the rep.
+
+What counts is the 86 note. "Didn't come in" and "Vendor short" are two of the
+quick notes on the 86 sheet, and a typed note such as "Chesapeake shorted the
+order" or "truck is late" counts too. "Sold out" and "Quality, pulled" do not:
+the supplier delivered. The supplier is the one named on the menu item, so an
+item with no vendor is left out, and the report says how many were.
+
+Nothing new is stored and nothing on the server changed. The report is worked
+out on the phone, from the history and the menu the app already loads, by
+`shared/vendor-report.ts`; `shared/vendor-report.test.ts` proves the counting.
 
 ## First sign-in (owner)
 
@@ -197,6 +219,8 @@ person who runs them, not in the repo.
 | `src/components/VendorNote.tsx` | The vendor note sheet: address, draft, Open in my email. |
 | `shared/vendor-note.ts` | The three-day rule, the note's wording and the email link, shared by the app and the morning email. |
 | `src/components/History.tsx` | What was out, how often, for how long. |
+| `src/components/VendorReport.tsx` | The "Shorted by vendor" bars on History, for managers and the owner. |
+| `shared/vendor-report.ts` | Which 86 notes blame the delivery, and the count per supplier. |
 | `src/components/Staff.tsx` | Add a person, the person sheet (reset, switch off, remove), load demo data. |
 | `src/components/Freshness.tsx` | The line that says how old the board is. "Live" while connected; red after 30 seconds without news. |
 | `src/hooks/useBoard.ts` | Keeps the board current: the live connection, the 5-second fallback, and the check that the account is still switched on. |
@@ -268,5 +292,4 @@ to run any time.
 
 1. Custom domain (omars86board.com) on the Amplify app. Set `APP_URL` on the
    Amplify app at the same time, so the morning email links to it.
-2. Vendor report: how often each supplier shorted us.
-3. Stale-item prompt each morning: still out, or back on?
+2. Stale-item prompt each morning: still out, or back on?

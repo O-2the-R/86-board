@@ -12,7 +12,7 @@ import { looksLikeEmail } from '../../shared/vendor-note';
 import { cleanUsername, nextFreeUsername, passwordFrom } from '../../shared/logins';
 import { isGuestUsername } from '../lib/demo';
 
-export const SAMPLE_KEY = 'eightysix.sample.v4'; // v4: vendor contacts and two items out 3+ days
+export const SAMPLE_KEY = 'eightysix.sample.v5'; // v5: short deliveries from four suppliers, for the vendor report
 const SESSION_KEY = 'eightysix.sample.session';
 const GUESTS_KEY = 'eightysix.sample.guests'; // demo username -> its password
 const MAX_GUESTS = 5; // demo logins kept on this phone
@@ -365,7 +365,7 @@ export const mockApi: BoardApi = {
     await wait(300);
     resetSampleData();
     load();
-    return { ok: true, restaurants: 3, items: 43, events: 14, staff: 60, demoPassword: 'any password' };
+    return { ok: true, restaurants: 3, items: 43, events: OPEN_SEEDS.length + CLOSED_SEEDS.length, staff: 60, demoPassword: 'any password' };
   },
 
   async repairData() {
