@@ -1,5 +1,6 @@
-// The screen shell: who is signed in, which restaurant, and the three
-// sections (Board, History, Staff). The login decides what you can touch.
+// The screen shell: who is signed in, which restaurant, and the sections:
+// the two functions (Board and Ask, the chat) plus History and Staff. The
+// login decides what you can touch.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Restaurant, Session } from './types';
 import { ROLE_LABEL, canEditBoard, canManageStaff, canSeeRestaurant, canSendVendorNotes, isOwner } from './types';
@@ -10,14 +11,16 @@ import { readString, writeString } from './lib/storage';
 import { initials } from './lib/format';
 import { useBoard } from './hooks/useBoard';
 import { AlertsBell, AlertsNudge, AlertsSheet, useAlerts } from './components/Alerts';
+import { Ask } from './components/Ask';
 import { Board } from './components/Board';
 import { Freshness } from './components/Freshness';
 import { History } from './components/History';
 import { Login } from './components/Login';
 import { Staff } from './components/Staff';
 import { RESTAURANTS as SAMPLE_RESTAURANTS } from '../shared/sample-data';
+import type { AssistantCatalog } from '../shared/assistant/catalog';
 
-type Tab = 'board' | 'history' | 'staff';
+type Tab = 'board' | 'ask' | 'history' | 'staff';
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined); // undefined = still checking
@@ -146,6 +149,27 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
   const outCount = useMemo(() => items.filter((i) => i.status === 'out').length, [items]);
   const noRestaurants = restaurants.length === 0;
 
+  // Ask, the chat: the lists it answers from. undefined while they load, null
+  // when Ask is not set up for this restaurant (then there is no Ask tab).
+  const [catalog, setCatalog] = useState<AssistantCatalog | null | undefined>(undefined);
+  const askId = restaurant?.id;
+  useEffect(() => {
+    let current = true;
+    setCatalog(undefined);
+    if (!askId) return;
+    api.getAssistant(askId).then(
+      (c) => current && setCatalog(c),
+      () => current && setCatalog(null),
+    );
+    return () => {
+      current = false;
+    };
+  }, [askId]);
+
+  useEffect(() => {
+    if (tab === 'ask' && catalog === null) setTab('board');
+  }, [tab, catalog]);
+
   useEffect(() => {
     // A fresh backend has no restaurants yet; the owner lands on Staff to load them.
     if (noRestaurants && isOwner(session)) setTab('staff');
@@ -177,6 +201,7 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
 
   const titles: Record<Tab, string> = {
     board: restaurant ? restaurant.name : '86 Board',
+    ask: catalog?.name ?? 'Ask',
     history: 'History',
     staff: 'Staff',
   };
@@ -206,11 +231,11 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
         </div>
       </header>
 
-      <div className="page">
+      <div className={'page' + (tab === 'ask' ? ' page-ask' : '')}>
         <div className="masthead">
           <h1 className="large-title">{titles[tab]}</h1>
           {tab === 'board' && restaurant && <Freshness lastOk={lastOk} failing={failing} live={live} />}
-          {tab === 'history' && restaurant && <span className="caption">{restaurant.name}</span>}
+          {(tab === 'history' || tab === 'ask') && restaurant && <span className="caption">{restaurant.name}</span>}
           {visible.length > 1 && (
             <div className="seg" role="tablist" aria-label="Restaurant">
               {visible.map((r) => (
@@ -247,6 +272,13 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
             ) : (
               <NoRestaurant session={session} goStaff={() => setTab('staff')} />
             ))}
+          {/* The chat stays in place while another tab shows, so a server can check the board and come back. */}
+          {catalog && restaurant && (
+            <div hidden={tab !== 'ask'}>
+              <Ask key={restaurant.id} restaurantId={restaurant.id} catalog={catalog} items={items} visible={tab === 'ask'} sample={api.mode === 'sample'} />
+            </div>
+          )}
+          {tab === 'ask' && catalog === undefined && <p className="caption center">Loading…</p>}
           {tab === 'history' &&
             (restaurant ? (
               <History restaurantId={restaurant.id} refreshKey={historyKey} items={items} showVendors={canSendVendorNotes(session, restaurant.id)} />
@@ -255,7 +287,7 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
             ))}
           {tab === 'staff' && manages && <Staff session={session} restaurants={restaurants} onDataChanged={() => void reloadRestaurants()} />}
 
-          {inDemo() ? (
+          {tab === 'ask' ? null : inDemo() ? (
             <footer className="foot">
               <p>Demo with sample restaurants. Everything you do stays on this phone. Nothing reaches a real kitchen, and no alerts are sent.</p>
               <div className="foot-actions">
@@ -288,6 +320,15 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
             Board
             {outCount > 0 && <span className="tab-badge num">{outCount}</span>}
           </button>
+          {catalog && (
+            <button type="button" className={'tab' + (tab === 'ask' ? ' is-on' : '')} onClick={() => setTab('ask')} aria-current={tab === 'ask'}>
+              <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H12l-4.5 4v-4h-1A2.5 2.5 0 0 1 4 13.5v-7A2.5 2.5 0 0 1 6.5 4z" />
+                <path d="M8.5 8.5h7M8.5 12h4" />
+              </svg>
+              Ask
+            </button>
+          )}
           <button type="button" className={'tab' + (tab === 'history' ? ' is-on' : '')} onClick={() => setTab('history')} aria-current={tab === 'history'}>
             <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="8.5" />

@@ -133,6 +133,7 @@ describe("the app's own check of a reply", () => {
     const s = stampReply([...found, item('Pinot Noir, Willamette Valley')], [], now, [], false);
     expect(s.alerts).toEqual([{ tone: 'no', text: "86'd right now: Negroni and Pinot Noir, Willamette Valley." }]);
     expect(cardFor(item('Negroni'), [], now).label).toBe("86'd");
+    expect(cardFor(item('Negroni'), ['egg'], now).reasons).toEqual([{ tone: 'no', text: "86'd on the board right now." }]);
     expect(cardFor(item('Crispy Calamari'), [], now).reasons).toEqual([{ tone: 'foot', text: 'Running low on the board: 3 left.' }]);
   });
 
@@ -232,6 +233,8 @@ describe('the demo answers (no AI)', () => {
   it("say what the board has 86'd", () => {
     expect(ask("What is 86'd right now?", [], board(['Tiramisu'])).body).toBe("86'd right now: [[Tiramisu]]. I will not suggest them.");
     expect(ask("What is 86'd right now?").body).toBe("Nothing on my lists is 86'd right now.");
+    // the guest's allergy does not get in the way of a question about the board
+    expect(ask("What is 86'd right now?", ['shellfish'], board(['Tiramisu'])).named).toEqual(['Tiramisu']);
   });
 
   it('read a house drink from the bar manual', () => {

@@ -39,7 +39,7 @@ export function cardFor(item: AssistantItem, keys: AllergenKey[], now: BoardNow)
   const reasons: CardReason[] = [];
   if (out) reasons.push({ tone: 'no', text: "86'd on the board right now." });
   for (const w of v.why) reasons.push({ tone: w.level === 2 ? 'no' : 'ask', label: w.label, text: w.text });
-  if (v.level === 0) reasons.push({ tone: 'foot', text: v.noData ? 'Wine is not on the allergy sheet.' : 'Not listed is not the same as safe.' });
+  if (v.level === 0 && !out) reasons.push({ tone: 'foot', text: v.noData ? 'Wine is not on the allergy sheet.' : 'Not listed is not the same as safe.' });
   if (!out && low !== undefined) reasons.push({ tone: 'foot', text: `Running low on the board: ${low} left.` });
   const tone = out || v.level === 2 ? 'no' : v.level === 1 ? 'ask' : v.level === 0 ? (v.noData ? 'nodata' : 'ok') : '';
   const label = out ? LABEL.out : tone === '' ? '' : LABEL[tone];

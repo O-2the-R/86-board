@@ -42,7 +42,7 @@ export function demoAnswer(catalog: AssistantCatalog, input: AskInput, now: Boar
   const named = namedIn(question, catalog.items);
   const lines: string[] = [];
 
-  if (has(/ 86 | 86 d | eighty six | sold out | is out | are out of /) && named.length === 0 && keys.length === 0) {
+  if (has(/ 86 | 86 d | eighty six | sold out | is out | are out of /) && named.length === 0) {
     const out = catalog.items.filter((i) => isOut(i, now));
     lines.push(out.length ? `86'd right now: ${listWords(out.map(tag))}. I will not suggest them.` : "Nothing on my lists is 86'd right now.");
   } else if (named.length > 0) {

@@ -4,7 +4,7 @@ import { CONNECTION_STATE_CHANGE, generateClient } from 'aws-amplify/data';
 import { Hub } from 'aws-amplify/utils';
 import { confirmSignIn, fetchAuthSession, getCurrentUser, signIn, signOut } from 'aws-amplify/auth';
 import type { Schema } from '../../amplify/data/resource';
-import type { BoardApi, IntegrationSettings, LiveHandlers, ManageStaffInput, ManageStaffResult, PushSubscriptionInput, RepairResult, SeedResult, SignInResult } from './types';
+import type { AskResult, BoardApi, IntegrationSettings, LiveHandlers, ManageStaffInput, ManageStaffResult, PushSubscriptionInput, RepairResult, SeedResult, SignInResult } from './types';
 import { linkStateOf } from '../lib/live';
 import { REPORT_URL } from '../amplify';
 import { newKey } from '../lib/random';
@@ -222,6 +222,16 @@ export const awsApi: BoardApi = {
 
   async logVendorNote(itemId) {
     check(await client().mutations.logVendorNote({ itemId }), 'Recording the vendor note');
+  },
+
+  // Ask is not connected to the real backend yet (the AI and the private
+  // lists arrive in the next change), so the tab stays hidden for real logins.
+  async getAssistant() {
+    return null;
+  },
+
+  async askAssistant(): Promise<AskResult> {
+    throw new Error('Ask is not set up for this restaurant yet.');
   },
 
   async listStaff() {

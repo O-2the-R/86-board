@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { addDemoGuest, demoGuestExists, mockApi, resetSampleData } from './mock';
 import { vendorReport } from '../../shared/vendor-report';
+import { boardNow } from '../../shared/assistant/catalog';
+import { parseReply } from '../../shared/assistant/reply';
 
 // No browser storage here, so the sample data lives in memory, exactly as it
 // does in a browser that blocks storage.
@@ -113,5 +115,32 @@ describe('the vendor report in the sample data', () => {
     // one time each, so the longer time off the menu (the bakery's six hours) stays on top
     expect(report.vendors.map((v) => `${v.vendor} ${v.times}`)).toEqual(['Metro Bakery 1', 'Capital Meats 1']);
     expect(report.vendors.find((v) => v.vendor === 'Capital Meats')?.stillOut).toBe(1);
+  });
+});
+
+describe('Ask in the sample mode', () => {
+  it('has lists for each sample restaurant and none for a restaurant it does not know', async () => {
+    for (const id of ['main', 'water', 'counter']) expect((await mockApi.getAssistant(id))?.restaurantId, id).toBe(id);
+    expect(await mockApi.getAssistant('nowhere')).toBeNull();
+  });
+
+  it("answers in pieces, and knows what the board has 86'd", async () => {
+    const items = await mockApi.listItems('main');
+    const tiramisu = items.find((i) => i.name === 'Tiramisu');
+    if (!tiramisu) throw new Error('no Tiramisu in the sample menu');
+    await mockApi.markOut(tiramisu.id, 'Sold out', 'Test');
+    const now = boardNow(await mockApi.listItems('main'));
+    const pieces: string[] = [];
+    const res = await mockApi.askAssistant('main', { turns: [{ role: 'user', content: 'Can I sell the Tiramisu?' }], known: [] }, now, { onText: (t) => pieces.push(t) });
+    expect(pieces.length).toBe(3);
+    expect(pieces[2]).toBe(res.text);
+    const parsed = parseReply(res.text, true);
+    expect(parsed.wait === false && parsed.body).toBe("[[Tiramisu]] is 86'd right now.");
+  });
+
+  it('stops when asked to', async () => {
+    const ctl = new AbortController();
+    ctl.abort();
+    await expect(mockApi.askAssistant('main', { turns: [{ role: 'user', content: 'A red' }], known: [] }, boardNow([]), { signal: ctl.signal })).rejects.toThrow('Stopped.');
   });
 });
