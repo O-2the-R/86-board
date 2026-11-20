@@ -1,7 +1,13 @@
-// What the AI reads before every question: the rules, the restaurant's
-// lists with their allergy marks, the house notes, what the 86 board says
-// right now, and what is known about this guest. Built fresh each time, so
-// an item 86'd a minute ago is already marked.
+// What the AI reads before every question, in two parts.
+//
+// The fixed part is the rules, the restaurant's lists with their allergy
+// marks, and the house notes. It only changes when new lists are loaded, so
+// the AI service can keep it ready between questions and charge a fraction
+// of the price for reading it again.
+//
+// The live part is short and built fresh for every question: what the 86
+// board says right now and what is known about this guest. An item 86'd a
+// minute ago is already in it.
 import type { AllergenKey, AssistantCatalog, AssistantItem, BoardNow, ItemKind } from './catalog';
 import { ALLERGENS, ALLERGEN_KEYS, isOut, lowCount } from './catalog';
 
@@ -37,13 +43,11 @@ function marks(item: AssistantItem): string {
   return ' | ' + (parts.length ? parts.join(' | ') : 'no marks');
 }
 
-export function lineFor(item: AssistantItem, now: BoardNow): string {
-  const low = lowCount(item, now);
-  const state = isOut(item, now) ? " [86'D]" : low !== undefined ? ` [LOW ${low}]` : '';
+export function lineFor(item: AssistantItem): string {
   const about = item.about ?? '';
-  if (item.kind === 'wine') return `${item.name} | ${item.section}${about ? ', ' + about : ''} | ${winePrice(item)}${marks(item)}${state}`;
+  if (item.kind === 'wine') return `${item.name} | ${item.section}${about ? ', ' + about : ''} | ${winePrice(item)}${marks(item)}`;
   const menus = item.kind === 'food' ? (item.menus?.length ? item.menus.join(', ') : 'every menu') + ' | ' : '';
-  return `${item.name} | ${item.section} | ${menus}${about}${marks(item)}${state}`;
+  return `${item.name} | ${item.section} | ${menus}${about}${marks(item)}`;
 }
 
 function rules(c: AssistantCatalog): string {
@@ -73,9 +77,10 @@ function rules(c: AssistantCatalog): string {
     '- A new allergy can come up at any point in the chat. Just answer for the guest as known now. Never apologize or say you were wrong earlier because of it.',
     '- Offer another item only when the server asks for ideas, or when the item they asked about is Avoid. Then offer one item of the same kind with no mark for the guest\'s allergies.',
     '',
-    '86 RULES (the marks come from the live 86 board)',
-    "- An item marked [86'D] is out right now. Do not suggest it. If the server asks about it, say it is 86'd.",
-    '- An item marked [LOW n] is running low, with n left. Say so when you suggest it.',
+    '86 RULES (the 86 BOARD section at the very end is the live board)',
+    "- An item it lists as 86'D is out right now. Do not suggest it. If the server asks about it, say it is 86'd.",
+    '- An item it lists as LOW is running low, with that many left. Say so when you suggest it.',
+    '- Everything else on the lists is available.',
     '',
     'MENU RULES',
     '- Each dish says which menus it is on. If the server does not say which meal is being served, assume dinner. Do not offer a dish that is only on another menu unless that meal is being served.',
@@ -85,11 +90,12 @@ function rules(c: AssistantCatalog): string {
   ].join('\n');
 }
 
-export function buildLead(catalog: AssistantCatalog, known: AllergenKey[], now: BoardNow): string {
+// The fixed part: the same text for every question until new lists are loaded.
+export function leadFixed(catalog: AssistantCatalog): string {
   const part = (kind: ItemKind) =>
     catalog.items
       .filter((i) => i.kind === kind)
-      .map((i) => lineFor(i, now))
+      .map(lineFor)
       .join('\n');
   const notes = catalog.docs.map((d) => `--- ${d.title}${d.asOf ? ' (' + d.asOf + ')' : ''} ---\n${d.text}`).join('\n\n');
   return (
@@ -101,15 +107,42 @@ export function buildLead(catalog: AssistantCatalog, known: AllergenKey[], now: 
     '\n\nFOOD (name | section | menus it is on | what is in it | allergy marks)\n' +
     part('food') +
     '\n\nHOUSE NOTES\n' +
-    (notes || 'None loaded.') +
+    (notes || 'None loaded.')
+  );
+}
+
+// The live part: the 86 board as it is now, one item to a line (what is out
+// first), and the guest.
+export function leadLive(catalog: AssistantCatalog, known: AllergenKey[], now: BoardNow): string {
+  const out: string[] = [];
+  const low: string[] = [];
+  for (const item of catalog.items) {
+    const left = lowCount(item, now);
+    if (isOut(item, now)) out.push(`86'D: ${item.name}`);
+    else if (left !== undefined) low.push(`LOW, ${left} left: ${item.name}`);
+  }
+  const board = [...out, ...low];
+  return (
+    '86 BOARD, right now\n' +
+    (board.length ? board.join('\n') : "Nothing on the lists is 86'd or running low.") +
     '\n\nKNOWN SO FAR, this guest cannot have: ' +
     (known.length ? known.join(', ') : 'none')
   );
 }
 
-// What is sent to the AI: the lead, then the last ten messages of the chat.
-export function buildTurns(lead: string, turns: Turn[]): Turn[] {
+export const buildLead = (catalog: AssistantCatalog, known: AllergenKey[], now: BoardNow): string => leadFixed(catalog) + '\n\n' + leadLive(catalog, known, now);
+
+// The chat as it is sent to the AI: the last ten messages, starting on a
+// question, with two messages in a row from the same side joined into one
+// (the AI service wants the two sides to take turns).
+export function recentTurns(turns: Turn[]): Turn[] {
   let recent = turns.slice(-10);
   while (recent.length && recent[0].role !== 'user') recent = recent.slice(1);
-  return [{ role: 'user', content: lead }, ...recent];
+  const out: Turn[] = [];
+  for (const t of recent) {
+    const last = out[out.length - 1];
+    if (last && last.role === t.role) last.content += '\n\n' + t.content;
+    else out.push({ role: t.role, content: t.content });
+  }
+  return out;
 }

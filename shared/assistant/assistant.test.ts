@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ALLERGEN_KEYS, NOTHING_OUT, boardNow, isAllergenKey, listWords, norm, type AssistantItem } from './catalog';
 import { OFF_SHEET, levelFor, verdict } from './check';
-import { buildLead, buildTurns, lineFor } from './prompt';
+import { buildLead, leadFixed, leadLive, lineFor, recentTurns } from './prompt';
 import { claimsSafe, detectAllergens, makeResolver, parseReply, splitBody } from './reply';
 import { MAX_CARDS, cardFor, stampReply } from './stamp';
 import { demoAnswer } from './demo';
@@ -167,21 +167,40 @@ describe('what the AI is given', () => {
     );
   });
 
-  it("marks what the 86 board says, live", () => {
-    expect(line('Tiramisu').endsWith(" [86'D]")).toBe(true);
-    expect(line('Caesar').endsWith(' [LOW 2]')).toBe(true);
-    expect(line('Negroni')).not.toContain('[');
+  it('keeps the lists free of anything that changes during service, so the AI service can keep them ready', () => {
+    const fixed = leadFixed(MAIN);
+    expect(lead.startsWith(fixed)).toBe(true);
+    expect(leadFixed(MAIN)).toBe(fixed);
+    expect(fixed).not.toContain('KNOWN SO FAR, this guest');
+    expect(fixed).not.toContain('86 BOARD, right now');
+    expect(line('Tiramisu')).not.toContain('86');
+  });
+
+  it('says what the 86 board has out or running low, live, one item to a line', () => {
+    const live = leadLive(MAIN, ['egg'], board(['Tiramisu'], [['Caesar', 2]]));
+    expect(live).toBe("86 BOARD, right now\n86'D: Tiramisu\nLOW, 2 left: Caesar\n\nKNOWN SO FAR, this guest cannot have: egg");
+    expect(leadLive(MAIN, [], NOTHING_OUT)).toBe("86 BOARD, right now\nNothing on the lists is 86'd or running low.\n\nKNOWN SO FAR, this guest cannot have: none");
+  });
+
+  it('finds a wine on the board by the name the board uses', () => {
+    const water = SAMPLE_CATALOGS.water;
+    expect(leadLive(water, [], board(['Sancerre (glass)']))).toContain("86'D: Sancerre\n");
   });
 
   it('gives wine its style and prices and no marks', () => {
-    expect(lineFor(item('Chianti Classico'), NOTHING_OUT)).toBe('Chianti Classico | Red, medium-bodied, cherry and spice | glass $14, bottle $54');
+    expect(lineFor(item('Chianti Classico'))).toBe('Chianti Classico | Red, medium-bodied, cherry and spice | glass $14, bottle $54');
   });
 
-  it('sends the lead, then the last ten messages, starting on a question', () => {
+  it('sends the last ten messages, starting on a question, the two sides taking turns', () => {
     const turns = Array.from({ length: 13 }, (_, i) => ({ role: i % 2 === 0 ? ('user' as const) : ('assistant' as const), content: 'm' + i }));
-    const sent = buildTurns('LEAD', turns);
-    expect(sent[0]).toEqual({ role: 'user', content: 'LEAD' });
-    expect(sent.slice(1).map((t) => t.content)).toEqual(['m4', 'm5', 'm6', 'm7', 'm8', 'm9', 'm10', 'm11', 'm12']);
+    expect(recentTurns(turns).map((t) => t.content)).toEqual(['m4', 'm5', 'm6', 'm7', 'm8', 'm9', 'm10', 'm11', 'm12']);
+    // an answer that never arrived leaves two questions in a row: they go as one
+    const twice = recentTurns([
+      { role: 'user', content: 'A red?' },
+      { role: 'user', content: 'By the glass.' },
+    ]);
+    expect(twice).toEqual([{ role: 'user', content: 'A red?\n\nBy the glass.' }]);
+    expect(turns[0].content).toBe('m0'); // the chat itself is left as it was
   });
 });
 

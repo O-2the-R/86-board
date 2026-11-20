@@ -9,6 +9,7 @@ import type { ManageAction } from '../api/types';
 import { initials } from '../lib/format';
 import { CopyLine, CopyMessage } from './CopyLine';
 import { Automations } from './Automations';
+import { AskSetup } from './AskSetup';
 import { cleanUsername, loginMessage, passwordFrom, usernameFor } from '../../shared/logins';
 import { randomInt } from '../lib/random';
 import { inDemo } from '../lib/demo';
@@ -17,6 +18,7 @@ interface Props {
   session: Session;
   restaurants: Restaurant[];
   onDataChanged: () => void; // after demo data loads
+  onAskChanged: () => void; // after the owner loads, shares or removes a restaurant's Ask lists
 }
 
 interface Notice {
@@ -31,7 +33,7 @@ interface Notice {
 // demo's address, because that is where the made-up login works.
 const appLink = () => (typeof window === 'undefined' ? '' : window.location.origin + (inDemo() ? '/?demo' : ''));
 
-export function Staff({ session, restaurants, onDataChanged }: Props) {
+export function Staff({ session, restaurants, onDataChanged, onAskChanged }: Props) {
   const owner = isOwner(session);
   const [people, setPeople] = useState<Person[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -256,6 +258,9 @@ export function Staff({ session, restaurants, onDataChanged }: Props) {
           </ul>
         </section>
       ))}
+
+      {/* The preview and the demo answer from the sample lists: nothing to set up there. */}
+      {owner && api.mode === 'aws' && <AskSetup restaurants={restaurants} onChanged={onAskChanged} />}
 
       {owner && <Automations />}
 

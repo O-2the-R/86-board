@@ -33,6 +33,7 @@ const ago = (hours: number) => new Date(Date.now() - hours * HOUR).toISOString()
 const wait = (ms = 120) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 const OWNER: Staff = { username: 'omar', displayName: 'Omar', role: 'owner', restaurantId: 'all', active: true };
+const NO_SETUP_HERE = 'The preview answers from the sample lists. Loading your own lists works on the real site.';
 
 function seed(): Store {
   const items: MenuItem[] = [];
@@ -342,6 +343,42 @@ export const mockApi: BoardApi = {
       opts?.onText?.(text.slice(0, Math.ceil(text.length * part)));
     }
     return { text, truncated: false };
+  },
+
+  // Sample mode has no lists to load and no AI: Ask answers from the made-up
+  // sample lists at every sample restaurant. The setup screen is for real sites.
+  async getAskSetup() {
+    await wait();
+    return Object.values(SAMPLE_CATALOGS).map((c) => ({
+      restaurantId: c.restaurantId,
+      loaded: true,
+      sample: true,
+      staffCanUse: true,
+      name: c.name,
+      asOf: c.asOf,
+      items: c.items.length,
+      notes: c.docs.length,
+      questionsToday: 0,
+      questions30: 0,
+      dailyLimit: 0,
+    }));
+  },
+
+  async loadAskLists() {
+    throw new Error(NO_SETUP_HERE);
+  },
+
+  async setAskAudience() {
+    throw new Error(NO_SETUP_HERE);
+  },
+
+  async removeAskLists() {
+    throw new Error(NO_SETUP_HERE);
+  },
+
+  async testAskAi() {
+    await wait();
+    return { ok: false, summary: 'The preview has no AI behind it. Answers are looked up on the sample lists.' };
   },
 
   async listStaff() {

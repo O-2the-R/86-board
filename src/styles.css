@@ -1247,6 +1247,26 @@ button.row:active {
   justify-content: flex-start;
 }
 
+/* The owner's Ask setup: one block per restaurant inside the panel. */
+.ask-setup-place {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.ask-setup-name {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.hint a {
+  color: var(--amber);
+  text-underline-offset: 2px;
+}
+
 .ok-text {
   color: var(--sage);
 }
