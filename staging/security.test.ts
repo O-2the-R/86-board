@@ -264,21 +264,36 @@ describe.skipIf(problem)('staging: who can do what', () => {
       expect(catalog.items.some((i) => i.name === 'Crispy Calamari')).toBe(true);
     });
 
-    it('the AI answers a question in the format the app reads', async () => {
-      const r = await ask(SERVER, 'main', 'Guest has a shellfish allergy. Can they have the Crispy Calamari?');
-      const said = r.errors[0]?.message ?? '';
-      if (said.includes('not switched on')) {
+    it('the AI answers a question, and a follow-up, in the format the app reads', async () => {
+      const first = 'Guest has a shellfish allergy. Can they have the Crispy Calamari?';
+      const r1 = await ask(SERVER, 'main', first);
+      const a1 = json<{ text: string; truncated: boolean }>(r1.data?.askAssistant);
+      // the follow-up carries the chat so far, the way the app sends it
+      const chat = [
+        { role: 'user', content: first },
+        { role: 'assistant', content: a1?.text ?? 'ALLERGIES: shellfish | OTHER: none\n\n[[Crispy Calamari]] is Avoid for this guest.' },
+        { role: 'user', content: 'And the Caesar?' },
+      ];
+      const r2 = await askRaw(SERVER, 'main', JSON.stringify(chat), ['shellfish']);
+      const a2 = json<{ text: string; truncated: boolean }>(r2.data?.askAssistant);
+
+      const said = [r1, r2].map((r) => r.errors[0]?.message ?? '').filter(Boolean);
+      // Anything but "the AI is not switched on" is a fault in the app, shown as it is.
+      const fault = said.find((m) => !m.includes('not switched on'));
+      if (fault) throw new Error(`Ask failed on staging: ${fault}`);
+      if (said.length > 0) {
         throw new Error(
-          'The AI is not switched on for this AWS account yet. One time, in the AWS console: Amazon Bedrock, region US East (Ohio), Model catalog, Claude Haiku 5.5, open it in the playground and send one message. Wait up to 15 minutes and run this test again.',
+          'The AI is not switched on for this AWS account yet. Everything up to the AI call worked, twice: the lists, the board, the daily count. One time, in the AWS console: Amazon Bedrock, region US East (Ohio), Model catalog, Claude Haiku 5.5, open it in the playground and send one message. Wait up to 15 minutes and run this test again.',
         );
       }
-      expect(r.errors).toEqual([]);
-      const answer = json<{ text: string; truncated: boolean }>(r.data?.askAssistant);
       // line 1 is how the app hears the allergy; the brackets are how it finds the item to label
-      expect(answer?.text.split('\n')[0]).toMatch(/^ALLERGIES:.*shellfish/i);
-      expect(answer?.text).toContain('[[Crispy Calamari]]');
-      expect(answer?.truncated).toBe(false);
-    }, 60_000);
+      expect(a1?.text.split('\n')[0]).toMatch(/^ALLERGIES:.*shellfish/i);
+      expect(a1?.text).toContain('[[Crispy Calamari]]');
+      expect(a1?.truncated).toBe(false);
+      expect(a2?.text.split('\n')[0]).toMatch(/^ALLERGIES:.*shellfish/i);
+      expect(a2?.text).toContain('[[Caesar]]');
+      expect(a2?.truncated).toBe(false);
+    }, 90_000);
   });
 
   it('the morning report link refuses a request without the key', async () => {

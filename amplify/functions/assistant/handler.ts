@@ -239,8 +239,9 @@ async function askAssistant(actor: Actor, args: AskArgs) {
     res = await converse(converseInput(MODEL_ID, stored.catalog, known, now, turns), 12_000);
   } catch (e) {
     const name = (e as { name?: string }).name;
-    console.error('The AI call failed', { name, message: e instanceof Error ? e.message : String(e), restaurantId, model: MODEL_ID });
-    throw new Refused(SAY[problemOf(name)]);
+    const message = e instanceof Error ? e.message : String(e);
+    console.error('The AI call failed', { name, message, restaurantId, model: MODEL_ID });
+    throw new Refused(SAY[problemOf(name, message)]);
   }
   const text = textOf(res);
   const u = res.usage;
@@ -305,10 +306,14 @@ async function testAi() {
     const name = (e as { name?: string }).name ?? 'Error';
     const message = e instanceof Error ? e.message : String(e);
     console.error('The AI test failed', { name, message, model: MODEL_ID });
-    const problem = problemOf(name);
-    const summary =
-      problem === 'off' ? `AWS refused the call (${name}). The AI is not switched on for this AWS account yet.` : problem === 'busy' ? `The AI did not answer in time (${name}). Try again in a minute.` : `The AI call failed (${name}).`;
-    return { ok: false, model: MODEL_ID, summary, detail: message.slice(0, 300) };
+    const problem = problemOf(name, message);
+    const summary = {
+      off: `AWS refused the call (${name}). The AI is not switched on for this AWS account yet.`,
+      denied: `AWS refused the call (${name}). This app's own permission does not cover the model. That is a fault in the app's setup, not a step for you.`,
+      busy: `The AI did not answer in time (${name}). Try again in a minute.`,
+      other: `The AI call failed (${name}).`,
+    }[problem];
+    return { ok: false, problem, model: MODEL_ID, summary, detail: message.slice(0, 300) };
   }
 }
 

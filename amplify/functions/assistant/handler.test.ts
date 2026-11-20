@@ -372,8 +372,21 @@ describe('the owner\'s test of the AI', () => {
     };
     expect(await manage(handler, OWNER, { action: 'test' })).toMatchObject({
       ok: false,
+      problem: 'off',
       summary: 'AWS refused the call (AccessDeniedException). The AI is not switched on for this AWS account yet.',
       detail: 'Model access is denied.',
     });
+  });
+
+  it('says so when the fault is the app\'s own permission, which is not the owner\'s to fix in AWS', async () => {
+    const handler = await boot();
+    fake.answer = () => {
+      throw Object.assign(new Error('User: arn:aws:sts::1:assumed-role/a/b is not authorized to perform: bedrock:InvokeModel on resource: arn:aws:bedrock:us-west-2::foundation-model/x'), { name: 'AccessDeniedException' });
+    };
+    const res = (await manage(handler, OWNER, { action: 'test' })) as unknown as { ok: boolean; problem: string; summary: string };
+    expect(res).toMatchObject({ ok: false, problem: 'denied' });
+    expect(res.summary).toContain("This app's own permission does not cover the model");
+    await manage(handler, OWNER, { action: 'load', restaurantId: 'main', lists: FILE });
+    expect(await refusal(ask(handler, OWNER, 'main'))).toBe('The AI is not available: this app is not allowed to call it. Tell the owner.');
   });
 });

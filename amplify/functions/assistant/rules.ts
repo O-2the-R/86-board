@@ -152,11 +152,15 @@ export const withRoomToThink = <T extends { inferenceConfig: { maxTokens: number
 
 // ---------- when the AI call fails ----------
 
-export type ModelProblem = 'off' | 'busy' | 'other';
+export type ModelProblem = 'off' | 'denied' | 'busy' | 'other';
 
-// AccessDenied and ResourceNotFound mean the model is not switched on for
-// this AWS account (or the app may not call it); the rest are passing trouble.
-export function problemOf(errorName: string | undefined): ModelProblem {
+// AWS answers "access denied" for two different things. Either the model is
+// not switched on for this AWS account yet (a one-time step for the owner),
+// or this app's own permission does not cover the model (a fault in the
+// app's setup, which AWS words as "not authorized to perform: bedrock:...").
+// The rest are passing trouble.
+export function problemOf(errorName: string | undefined, message = ''): ModelProblem {
+  if (errorName === 'AccessDeniedException' && /not authorized to perform: bedrock:/i.test(message)) return 'denied';
   if (errorName === 'AccessDeniedException' || errorName === 'ResourceNotFoundException') return 'off';
   if (
     errorName === 'ThrottlingException' ||
@@ -174,6 +178,7 @@ export function problemOf(errorName: string | undefined): ModelProblem {
 
 export const SAY: Record<ModelProblem, string> = {
   off: 'The AI is not switched on for this app yet. The owner turns it on once, in AWS.',
+  denied: 'The AI is not available: this app is not allowed to call it. Tell the owner.',
   busy: 'The AI is busy right now. Send it again in a moment.',
   other: 'The AI could not answer that. Send it again.',
 };

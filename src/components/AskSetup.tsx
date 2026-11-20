@@ -140,10 +140,11 @@ export function AskSetup({ restaurants, onChanged }: Props) {
           </button>
           {test && <span className={'caption ' + (test.ok ? 'ok-text' : 'bad-text')}>{test.summary}</span>}
         </div>
-        {test && !test.ok && (
+        {test && !test.ok && (test.problem === 'off' || test.detail) && (
           <p className="hint">
-            To switch it on: in the AWS console open Amazon Bedrock, region US East (Ohio). Under Model catalog pick Claude Haiku 5.5 and send one message in the playground. Wait up to 15
-            minutes, then test again.{test.detail ? ` AWS said: ${test.detail}` : ''}
+            {test.problem === 'off' &&
+              'To switch it on: in the AWS console open Amazon Bedrock, region US East (Ohio). Under Model catalog pick Claude Haiku 5.5 and send one message in the playground. Wait up to 15 minutes, then test again. '}
+            {test.detail ? `AWS said: ${test.detail}` : ''}
           </p>
         )}
 

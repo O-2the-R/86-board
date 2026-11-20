@@ -181,10 +181,17 @@ describe('what the AI is sent', () => {
 describe('when the AI call fails', () => {
   it('tells "not switched on" from "busy" from anything else', () => {
     expect(problemOf('AccessDeniedException')).toBe('off');
+    expect(problemOf('AccessDeniedException', 'Model access is denied due to IAM user or service role is not authorized to perform the required AWS Marketplace actions (aws-marketplace:ViewSubscriptions, aws-marketplace:Subscribe) to enable access to this model.')).toBe('off');
     expect(problemOf('ResourceNotFoundException')).toBe('off');
     for (const name of ['ThrottlingException', 'ServiceUnavailableException', 'ModelTimeoutException', 'ModelNotReadyException', 'InternalServerException', 'AbortError', 'TimeoutError']) expect(problemOf(name), name).toBe('busy');
     expect(problemOf('ValidationException')).toBe('other');
     expect(problemOf(undefined)).toBe('other');
+  });
+
+  it('tells the owner\'s one-time step from a fault in the app\'s own permission', () => {
+    const iam = 'User: arn:aws:sts::123456789012:assumed-role/amplify-x-assistantlambdaServiceRole/y is not authorized to perform: bedrock:InvokeModel on resource: arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-5-5 because no identity-based policy allows the bedrock:InvokeModel action';
+    expect(problemOf('AccessDeniedException', iam)).toBe('denied');
+    expect(SAY.denied).not.toBe(SAY.off);
   });
 
   it('has a plain sentence for each, with nothing about AWS for staff to puzzle over', () => {

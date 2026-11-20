@@ -258,8 +258,8 @@ How a change goes live:
      change or listen to the stored lists or the question counts directly; a
      server cannot get or ask from another restaurant's lists; what is not a
      question is refused before it reaches the AI
-   - Ask: a Main Street server asks the AI a real question and gets an answer
-     in the format the app reads
+   - Ask: a Main Street server asks the AI a real question and a follow-up,
+     and gets both answers in the format the app reads
 4. Try the change on staging yourself, then merge. Merging is the deploy to
    the live board.
 
@@ -270,7 +270,8 @@ On staging only, a sample restaurant with no lists of its own answers from the
 made-up sample lists, open to its demo staff. That is how the test can ask a
 real question without the owner's login. (The live site never does this: there
 Ask exists only where the owner loaded lists.) The AI check stays red until
-the AI is switched on for the AWS account (see "The AI" above).
+the AI is switched on for the AWS account (see "The AI" above), and says so.
+If it is red for any other reason, it says that reason instead.
 
 One-time setup (already done once staging exists):
 

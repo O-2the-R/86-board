@@ -267,8 +267,8 @@ export const awsApi: BoardApi = {
 
   async testAskAi(): Promise<AskAiTest> {
     const res = await client().mutations.manageAssistant({ action: 'test' });
-    const out = parseJson<{ ok: boolean; summary: string; detail?: string; model?: string }>(check(res, 'Testing the AI'));
-    return { ok: Boolean(out.ok), summary: out.summary, detail: out.detail, model: out.model };
+    const out = parseJson<AskAiTest>(check(res, 'Testing the AI'));
+    return { ok: Boolean(out.ok), problem: out.problem, summary: out.summary, detail: out.detail, model: out.model };
   },
 
   async listStaff() {
