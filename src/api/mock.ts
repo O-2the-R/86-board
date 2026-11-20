@@ -11,6 +11,8 @@ import { CLOSED_SEEDS, LOW_SEEDS, MENUS, OPEN_SEEDS, RESTAURANTS, STAFF, VENDORS
 import { looksLikeEmail } from '../../shared/vendor-note';
 import { cleanUsername, nextFreeUsername, passwordFrom } from '../../shared/logins';
 import { isGuestUsername } from '../lib/demo';
+import { SAMPLE_CATALOGS } from '../../shared/assistant/sample';
+import { demoAnswer } from '../../shared/assistant/demo';
 
 export const SAMPLE_KEY = 'eightysix.sample.v5'; // v5: short deliveries from four suppliers, for the vendor report
 const SESSION_KEY = 'eightysix.sample.session';
@@ -321,6 +323,25 @@ export const mockApi: BoardApi = {
     it.vendorNoteAt = new Date().toISOString();
     it.vendorNoteBy = by;
     save(store);
+  },
+
+  async getAssistant(restaurantId) {
+    await wait();
+    return SAMPLE_CATALOGS[restaurantId] ?? null;
+  },
+
+  // No AI in the sample mode: the answer is looked up on the sample lists
+  // (shared/assistant/demo.ts) and arrives in pieces, like the real thing.
+  async askAssistant(restaurantId, input, now, opts) {
+    const catalog = SAMPLE_CATALOGS[restaurantId];
+    if (!catalog) throw new Error('Ask is not set up for this restaurant.');
+    const text = demoAnswer(catalog, input, now);
+    for (const part of [0.35, 0.7, 1]) {
+      await wait(160);
+      if (opts?.signal?.aborted) throw new Error('Stopped.');
+      opts?.onText?.(text.slice(0, Math.ceil(text.length * part)));
+    }
+    return { text, truncated: false };
   },
 
   async listStaff() {

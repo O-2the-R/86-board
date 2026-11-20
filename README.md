@@ -5,6 +5,11 @@ when, and why. Managers and kitchen update it. Servers and hosts see it, and
 their phones buzz when something changes. Every 86 is kept as history, and
 every person has their own login.
 
+The app has two functions. The **Board** is the 86 list. **Ask** is a chat for
+the floor that knows the restaurant's food, drinks and house notes, prints a
+checked allergy label next to everything it names, and knows what the board
+has 86'd (see "Ask: the chat" below).
+
 Live: https://main.d2w35vo1xnmx2i.amplifyapp.com
 (AWS Amplify Hosting, Ohio region. Every push to `main` goes live in a few minutes.)
 
@@ -37,6 +42,42 @@ role against the item's restaurant and stamps who did it from their login.
 Editors tap a menu item and choose "86 it" or "Running low". Both move the item
 onto a paper ticket at the top of the board, where "Back on" or "Plenty again"
 returns it.
+
+## Ask: the chat
+
+The second tab. A server types a question the way they would ask a colleague:
+"Shellfish allergy at table 6, what red goes with the short rib?" The answer
+comes back as a short chat message, with two things added by the app itself:
+
+- **Warnings above the answer.** "Avoid for this guest: Crispy Calamari."
+- **A ticket under the answer.** Every dish and drink the answer names, each
+  with its label: **Avoid**, **Ask first**, **Not listed**, or **86'd**.
+
+Who says what:
+
+- The chat text is written by the AI. It is told the rules, the restaurant's
+  lists, the house notes, and what the board says right now.
+- The labels are never written by the AI. The app reads two things out of each
+  answer, the allergies it heard and the items it named, and looks every item
+  up in the restaurant's own allergy marks. Nothing is ever called safe. "Not
+  listed" means the allergy sheet has no mark, and says so.
+- An allergy can be typed in the chat or tapped under "Allergies". Either way
+  every earlier answer on the screen is checked again.
+- The 86 board is the chat's "out" list. An item 86'd a minute ago is marked
+  for the AI on the next question and stamped 86'd on any answer that names
+  it. Running-low items carry their count.
+
+What a restaurant loads for it is data, not code (`shared/assistant/catalog.ts`
+has the shape): the dishes and drinks with their allergy marks and reasons,
+the wine list with prices, and house notes such as the bar manual. The three
+sample restaurants have made-up lists (`shared/assistant/sample.ts`). A real
+restaurant's lists and recipes are private and never go in this repo.
+
+Where it runs today: the preview and the public demo, on the sample lists. They
+have no AI, so the answer is looked up on the lists (`shared/assistant/demo.ts`)
+and everything after that is the real thing: the labels, the warnings, the 86
+marks. For real logins the tab stays hidden until the AI and the private lists
+are connected, which is the next change (see "Next").
 
 ## Vendor notes: anything out three days or more
 
@@ -210,7 +251,7 @@ person who runs them, not in the repo.
 | --- | --- |
 | `index.html` | The page shell, icons and the home-screen app tags. |
 | `public/manifest.json`, `public/sw.js`, `public/icons/` | What makes the site installable, and the service worker that shows alerts. |
-| `src/App.tsx` | The screen: who is signed in, which restaurant, Board / History / Staff, the bell. |
+| `src/App.tsx` | The screen: who is signed in, which restaurant, Board / Ask / History / Staff, the bell. |
 | `src/components/Login.tsx` | Username and password; handles the first-time password change; the "Try the demo" button. |
 | `src/components/DemoStart.tsx` | The demo's front door: pick a role, get a made-up login, start. |
 | `src/lib/demo.ts` | Decides when this tab is the demo, and the demo roles. |
@@ -218,6 +259,12 @@ person who runs them, not in the repo.
 | `src/components/Alerts.tsx` | The bell, the nudge, and the sheet that turns alerts on or off. |
 | `src/components/VendorNote.tsx` | The vendor note sheet: address, draft, Open in my email. |
 | `shared/vendor-note.ts` | The three-day rule, the note's wording and the email link, shared by the app and the morning email. |
+| `src/components/Ask.tsx` | Ask, the chat: the thread, the warnings, the ticket of labels, the allergy sheet, the message box. |
+| `shared/assistant/catalog.ts` | What a restaurant loads for Ask: items, allergy marks, house notes. Also the 20 allergens and how an item is matched to the 86 board. |
+| `shared/assistant/check.ts` | The allergy answer for one item: a lookup in the marks. `stamp.ts` turns it into the warnings and the ticket. |
+| `shared/assistant/prompt.ts` | Everything the AI is given before a question. `reply.ts` reads its answer back. |
+| `shared/assistant/sample.ts`, `demo.ts` | Made-up lists for the sample restaurants, and the no-AI answers the demo uses. |
+| `shared/assistant/assistant.test.ts` | Proves all of the above. |
 | `src/components/History.tsx` | What was out, how often, for how long. |
 | `src/components/VendorReport.tsx` | The "Shorted by vendor" bars on History, for managers and the owner. |
 | `shared/vendor-report.ts` | Which 86 notes blame the delivery, and the count per supplier. |
@@ -290,6 +337,9 @@ to run any time.
 
 ## Next
 
-1. Custom domain (omars86board.com) on the Amplify app. Set `APP_URL` on the
+1. Ask for real logins: the AI on AWS (Amazon Bedrock), and a private,
+   owner-only way to load a restaurant's own lists and house notes. Then the
+   restaurant's training material as house notes.
+2. Custom domain (omars86board.com) on the Amplify app. Set `APP_URL` on the
    Amplify app at the same time, so the morning email links to it.
-2. Stale-item prompt each morning: still out, or back on?
+3. Stale-item prompt each morning: still out, or back on?

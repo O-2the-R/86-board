@@ -1,5 +1,7 @@
 import type { EightySixEvent, MenuItem, Restaurant, Session, Staff, StaffRole, Vendor } from '../types';
 import type { ItemChange, LinkState } from '../lib/live';
+import type { AssistantCatalog, BoardNow } from '../../shared/assistant/catalog';
+import type { AskInput } from '../../shared/assistant/prompt';
 
 export type ManageAction = 'create' | 'deactivate' | 'reactivate' | 'resetPassword' | 'remove' | 'suggestUsername';
 
@@ -64,6 +66,18 @@ export interface LiveHandlers {
   failed: () => void; // the feed stopped for good; the board starts it again later
 }
 
+// One answer from Ask. `text` starts with the line the app reads the guest's
+// allergies from; `truncated` means the answer was cut short.
+export interface AskResult {
+  text: string;
+  truncated: boolean;
+}
+
+export interface AskOptions {
+  signal?: AbortSignal; // the Stop button
+  onText?: (soFar: string) => void; // the answer so far, as it arrives
+}
+
 // The "data drawer". The screens only talk to this.
 // Sample mode fills it from the browser (mock.ts); the real app from AWS (aws.ts).
 export interface BoardApi {
@@ -99,6 +113,12 @@ export interface BoardApi {
   // the manager opened the note in their own email; `by` is for the sample
   // mode only, the real app stamps the name on the server
   logVendorNote(itemId: string, by: string): Promise<void>;
+
+  // Ask, the chat. The lists it answers from, or null when Ask is not set
+  // up for this restaurant (then the tab is not shown).
+  getAssistant(restaurantId: string): Promise<AssistantCatalog | null>;
+  // One question. `now` is what the 86 board says at this moment.
+  askAssistant(restaurantId: string, input: AskInput, now: BoardNow, opts?: AskOptions): Promise<AskResult>;
 
   // staff admin
   listStaff(): Promise<Staff[]>;
