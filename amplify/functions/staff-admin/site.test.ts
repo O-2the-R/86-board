@@ -46,15 +46,15 @@ const said = async (p: Promise<unknown>) => p.then(() => 'done', (e) => (e insta
 describe('setting up the owner\'s own restaurant', () => {
   it('names the first slot and marks it as their own, from that moment', async () => {
     const s = site();
-    const own = await setUp(s.db, '  Nonna   (Midtown DC) ', SETUP);
-    expect(own).toEqual({ id: OWN_SLOT, name: 'Nonna (Midtown DC)', kind: 'Restaurant', sortOrder: 0, own: true, ownSince: SETUP, samplesGone: false });
-    expect((await s.db.restaurants()).find((r) => r.id === 'main')).toMatchObject({ name: 'Nonna (Midtown DC)', own: true });
+    const own = await setUp(s.db, '  Pepe   (Harbor Road) ', SETUP);
+    expect(own).toEqual({ id: OWN_SLOT, name: 'Pepe (Harbor Road)', kind: 'Restaurant', sortOrder: 0, own: true, ownSince: SETUP, samplesGone: false });
+    expect((await s.db.restaurants()).find((r) => r.id === 'main')).toMatchObject({ name: 'Pepe (Harbor Road)', own: true });
   });
 
   it('renames it later without moving that moment', async () => {
     const s = site();
-    await setUp(s.db, 'Nonna', SETUP);
-    expect(await setUp(s.db, 'Nonna (Midtown DC)', AFTER)).toMatchObject({ name: 'Nonna (Midtown DC)', ownSince: SETUP, kind: 'Restaurant' });
+    await setUp(s.db, 'Pepe', SETUP);
+    expect(await setUp(s.db, 'Pepe (Harbor Road)', AFTER)).toMatchObject({ name: 'Pepe (Harbor Road)', ownSince: SETUP, kind: 'Restaurant' });
   });
 
   it('works on a site with no restaurants at all, and asks for a real name', async () => {
@@ -62,8 +62,8 @@ describe('setting up the owner\'s own restaurant', () => {
     for (const id of ['main', 'water', 'counter']) await s.db.remove('Restaurant', id);
     expect(await said(setUp(s.db, ' ', SETUP))).toBe('Type the name of your restaurant.');
     expect(await said(setUp(s.db, 'x'.repeat(41), SETUP))).toBe('Keep the name under 40 characters.');
-    expect((await setUp(s.db, 'Nonna', SETUP)).ownSince).toBe(SETUP);
-    expect(s.names()).toEqual(['Nonna']);
+    expect((await setUp(s.db, 'Pepe', SETUP)).ownSince).toBe(SETUP);
+    expect(s.names()).toEqual(['Pepe']);
   });
 });
 
@@ -111,10 +111,10 @@ describe('removing the samples', () => {
 
   it('leaves one restaurant, the owner, and the lists loaded for it', async () => {
     const s = site();
-    await setUp(s.db, 'Nonna (Midtown DC)', SETUP);
+    await setUp(s.db, 'Pepe (Harbor Road)', SETUP);
     const res = await removeSamples(s.db, s.logins, owner);
     expect(res).toMatchObject({ done: true, left: 0, removed: { Staff: 4, MenuItem: 4, EightySixEvent: 3, Vendor: 2, PushSubscription: 2, AskLists: 1, AskUsage: 1, Restaurant: 2 } });
-    expect(s.names()).toEqual(['Nonna (Midtown DC)']);
+    expect(s.names()).toEqual(['Pepe (Harbor Road)']);
     expect(s.ids('Staff')).toEqual(['omar']);
     expect(s.loginsRemoved.sort()).toEqual(['dev.p', 'lena.k', 'priya.m', 'sam.t']);
     expect(s.ids('PushSubscription')).toEqual(['p-omar']);
@@ -125,7 +125,7 @@ describe('removing the samples', () => {
 
   it('remembers that it finished, so the tables are not read again every time the Staff screen opens', async () => {
     const s = site();
-    await setUp(s.db, 'Nonna', SETUP);
+    await setUp(s.db, 'Pepe', SETUP);
     await removeSamples(s.db, s.logins, owner);
     expect((await s.db.restaurants())[0]).toMatchObject({ own: true, samplesGone: true });
     let reads = 0;
@@ -134,12 +134,12 @@ describe('removing the samples', () => {
     expect((await whatGoes(s.db, owner, AFTER)).counts.Staff).toBe(0);
     expect(reads).toBe(0);
     // and a new name does not undo that
-    expect(await setUp(s.db, 'Nonna (Midtown DC)', AFTER)).toMatchObject({ samplesGone: true, ownSince: SETUP });
+    expect(await setUp(s.db, 'Pepe (Harbor Road)', AFTER)).toMatchObject({ samplesGone: true, ownSince: SETUP });
   });
 
   it('does not touch what was made after the set-up, however often it is pressed', async () => {
     const s = site();
-    await setUp(s.db, 'Nonna', SETUP);
+    await setUp(s.db, 'Pepe', SETUP);
     await removeSamples(s.db, s.logins, owner);
     s.tables.MenuItem.push({ id: 'main-calamari', restaurantId: 'main', createdAt: AFTER });
     s.tables.EightySixEvent.push({ id: 'real-86', restaurantId: 'main', createdAt: AFTER });
@@ -155,7 +155,7 @@ describe('removing the samples', () => {
 
   it('stops when its time is up, says how much is left, and carries on when called again', async () => {
     const s = site();
-    await setUp(s.db, 'Nonna', SETUP);
+    await setUp(s.db, 'Pepe', SETUP);
     for (let i = 0; i < 30; i++) s.tables.EightySixEvent.push({ id: 'old' + i, restaurantId: 'water', createdAt: BEFORE });
     let now = 0;
     const slow = () => (now += 5_000); // every look at the clock: five seconds later
@@ -166,7 +166,7 @@ describe('removing the samples', () => {
     for (let res = first; !res.done && rounds < 20; rounds++) res = await removeSamples(s.db, s.logins, owner, slow, 18_000);
     expect(rounds).toBeLessThan(20);
     expect(s.ids('EightySixEvent')).toEqual([]);
-    expect(s.names()).toEqual(['Nonna']);
+    expect(s.names()).toEqual(['Pepe']);
     expect(s.ids('Staff')).toEqual(['omar']);
   });
 });
