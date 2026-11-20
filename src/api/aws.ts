@@ -4,11 +4,12 @@ import { CONNECTION_STATE_CHANGE, generateClient } from 'aws-amplify/data';
 import { Hub } from 'aws-amplify/utils';
 import { confirmSignIn, fetchAuthSession, getCurrentUser, signIn, signOut } from 'aws-amplify/auth';
 import type { Schema } from '../../amplify/data/resource';
-import type { AskResult, BoardApi, IntegrationSettings, LiveHandlers, ManageStaffInput, ManageStaffResult, PushSubscriptionInput, RepairResult, SeedResult, SignInResult } from './types';
+import type { AskAiTest, AskResult, AskSetup, BoardApi, IntegrationSettings, LiveHandlers, ManageStaffInput, ManageStaffResult, PushSubscriptionInput, RepairResult, SeedResult, SignInResult } from './types';
 import { linkStateOf } from '../lib/live';
 import { REPORT_URL } from '../amplify';
 import { newKey } from '../lib/random';
 import type { EightySixEvent, ItemStatus, MenuItem, Restaurant, Role, Session, Staff, Vendor } from '../types';
+import type { AssistantCatalog } from '../../shared/assistant/catalog';
 
 type Client = ReturnType<typeof generateClient<Schema>>;
 let cached: Client | null = null;
@@ -224,14 +225,50 @@ export const awsApi: BoardApi = {
     check(await client().mutations.logVendorNote({ itemId }), 'Recording the vendor note');
   },
 
-  // Ask is not connected to the real backend yet (the AI and the private
-  // lists arrive in the next change), so the tab stays hidden for real logins.
-  async getAssistant() {
-    return null;
+  // Ask. The assistant function decides who gets the lists and builds what
+  // the AI reads on the server (the stored lists, the board in the database).
+  // The phone sends only the chat and the allergies picked for this guest.
+  async getAssistant(restaurantId) {
+    const res = await client().queries.getAssistant({ restaurantId });
+    return parseJson<AssistantCatalog | null>(check(res, 'Loading Ask')) ?? null;
   },
 
-  async askAssistant(): Promise<AskResult> {
-    throw new Error('Ask is not set up for this restaurant yet.');
+  async askAssistant(restaurantId, input, _now, opts): Promise<AskResult> {
+    const stopped = () => new Error('Stopped.');
+    if (opts?.signal?.aborted) throw stopped();
+    const sent = client().mutations.askAssistant({ restaurantId, turns: JSON.stringify(input.turns), known: input.known });
+    // The answer arrives whole. Stop only stops waiting for it.
+    const res = await (opts?.signal
+      ? Promise.race([sent, new Promise<never>((_, reject) => opts.signal?.addEventListener('abort', () => reject(stopped()), { once: true }))])
+      : sent);
+    // the function's own sentence, as it is: it is shown in the chat
+    if (res.errors?.length) throw new Error(res.errors.map((e) => e.message).join(' '));
+    const out = parseJson<AskResult | null>(res.data);
+    if (!out?.text) throw new Error('The AI could not answer that. Send it again.');
+    opts?.onText?.(out.text);
+    return { text: out.text, truncated: Boolean(out.truncated) };
+  },
+
+  async getAskSetup() {
+    return (await manageAsk({ action: 'status' }, 'Loading the Ask setup')).restaurants.map(toAskSetup);
+  },
+
+  async loadAskLists(restaurantId, fileText) {
+    return oneSetup(await manageAsk({ action: 'load', restaurantId, lists: fileText }, 'Loading the lists'));
+  },
+
+  async setAskAudience(restaurantId, staffCanUse) {
+    return oneSetup(await manageAsk({ action: 'audience', restaurantId, staffCanUse }, 'Saving who can use Ask'));
+  },
+
+  async removeAskLists(restaurantId) {
+    return oneSetup(await manageAsk({ action: 'remove', restaurantId }, 'Removing the lists'));
+  },
+
+  async testAskAi(): Promise<AskAiTest> {
+    const res = await client().mutations.manageAssistant({ action: 'test' });
+    const out = parseJson<AskAiTest>(check(res, 'Testing the AI'));
+    return { ok: Boolean(out.ok), problem: out.problem, summary: out.summary, detail: out.detail, model: out.model };
   },
 
   async listStaff() {
@@ -296,6 +333,40 @@ export const awsApi: BoardApi = {
 };
 
 const INTEGRATION_ID = 'n8n';
+
+// ----- Ask setup (owner) -----
+type AskSetupRow = { [K in keyof AskSetup]: AskSetup[K] | null };
+
+async function manageAsk(args: { action: string; restaurantId?: string; lists?: string; staffCanUse?: boolean }, what: string): Promise<{ restaurants: AskSetupRow[] }> {
+  const res = await client().mutations.manageAssistant(args);
+  // a refusal is the function's own sentence ("Crispy Calamari: ..."): show it as it is
+  if (res.errors?.length) throw new Error(res.errors.map((e) => e.message).join(' '));
+  const out = parseJson<{ restaurants?: AskSetupRow[] } | null>(res.data);
+  if (!out?.restaurants) throw new Error(`${what} did not finish. Try again.`);
+  return { restaurants: out.restaurants };
+}
+
+function oneSetup(out: { restaurants: AskSetupRow[] }): AskSetup {
+  const first = out.restaurants[0];
+  if (!first) throw new Error('That did not finish. Try again.');
+  return toAskSetup(first);
+}
+
+const toAskSetup = (r: AskSetupRow): AskSetup => ({
+  restaurantId: r.restaurantId ?? '',
+  loaded: Boolean(r.loaded),
+  sample: Boolean(r.sample),
+  staffCanUse: Boolean(r.staffCanUse),
+  name: orUndef(r.name),
+  asOf: orUndef(r.asOf),
+  items: r.items ?? 0,
+  notes: r.notes ?? 0,
+  loadedAt: orUndef(r.loadedAt),
+  loadedBy: orUndef(r.loadedBy),
+  questionsToday: r.questionsToday ?? 0,
+  questions30: r.questions30 ?? 0,
+  dailyLimit: r.dailyLimit ?? 0,
+});
 
 // Amplify announces the live connection's state on its Hub, one connection
 // for all subscriptions. One listener remembers the latest state and passes

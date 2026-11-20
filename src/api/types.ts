@@ -78,6 +78,31 @@ export interface AskOptions {
   onText?: (soFar: string) => void; // the answer so far, as it arrives
 }
 
+// The owner's view of Ask at one restaurant.
+export interface AskSetup {
+  restaurantId: string;
+  loaded: boolean; // there are lists to answer from
+  sample: boolean; // they are the made-up sample lists (staging only)
+  staffCanUse: boolean; // false: only the owner sees the Ask tab here
+  name?: string; // what the lists call the assistant
+  asOf?: string; // the lists' own date line
+  items: number;
+  notes: number;
+  loadedAt?: string;
+  loadedBy?: string;
+  questionsToday: number;
+  questions30: number; // the last 30 days, today included
+  dailyLimit: number;
+}
+
+export interface AskAiTest {
+  ok: boolean;
+  problem?: 'off' | 'denied' | 'busy' | 'other'; // off: the model is not switched on for the AWS account yet
+  summary: string; // one sentence for the owner
+  detail?: string; // AWS's own words when it refused
+  model?: string;
+}
+
 // The "data drawer". The screens only talk to this.
 // Sample mode fills it from the browser (mock.ts); the real app from AWS (aws.ts).
 export interface BoardApi {
@@ -119,6 +144,14 @@ export interface BoardApi {
   getAssistant(restaurantId: string): Promise<AssistantCatalog | null>;
   // One question. `now` is what the 86 board says at this moment.
   askAssistant(restaurantId: string, input: AskInput, now: BoardNow, opts?: AskOptions): Promise<AskResult>;
+  // Setting Ask up (owner only). A restaurant's lists are loaded from a file
+  // and stay private: only the owner uses Ask there until staffCanUse is on.
+  getAskSetup(): Promise<AskSetup[]>;
+  loadAskLists(restaurantId: string, fileText: string): Promise<AskSetup>;
+  setAskAudience(restaurantId: string, staffCanUse: boolean): Promise<AskSetup>;
+  removeAskLists(restaurantId: string): Promise<AskSetup>;
+  // asks the AI one word, to show whether AWS lets this app call it
+  testAskAi(): Promise<AskAiTest>;
 
   // staff admin
   listStaff(): Promise<Staff[]>;

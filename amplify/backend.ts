@@ -8,6 +8,7 @@ import { data } from './data/resource';
 import { staffAdmin } from './functions/staff-admin/resource';
 import { push } from './functions/push/resource';
 import { board } from './functions/board/resource';
+import { assistant } from './functions/assistant/resource';
 
 const backend = defineBackend({
   auth,
@@ -15,6 +16,7 @@ const backend = defineBackend({
   staffAdmin,
   push,
   board,
+  assistant,
 });
 
 const userPool = backend.auth.resources.userPool;
@@ -107,6 +109,45 @@ backend.addOutput({ custom: { reportUrl: reportUrl.url } });
 const branch = (process.env.AWS_BRANCH ?? '').replace(/[^a-zA-Z0-9-]/g, '-');
 const appUrl = process.env.APP_URL || (process.env.AWS_APP_ID && branch ? `https://${branch}.${process.env.AWS_APP_ID}.amplifyapp.com` : '');
 backend.push.addEnvironment('APP_URL', appUrl);
+
+// ----- Ask: the AI -----
+// The assistant function answers Ask's questions with Claude on Amazon
+// Bedrock. Bedrock has no key to keep: the function's own role is allowed to
+// call one model, and nothing else in the app can.
+//
+// The model is named by its "inference profile": us.<model> keeps every
+// question inside US data centers (the price list calls this Geo). Set
+// ASK_MODEL_ID on the Amplify app to change the model without a code change.
+const ASK_MODEL_ID = process.env.ASK_MODEL_ID || 'us.anthropic.claude-haiku-5-5';
+const assistantLambda = backend.assistant.resources.lambda;
+const assistantStack = Stack.of(assistantLambda);
+const viaProfile = /^(us|eu|apac|jp|au|ca|in|us-gov|global)\.(.+)$/.exec(ASK_MODEL_ID);
+if (viaProfile) {
+  // A profile sends the call on to the model in one of its regions, so the
+  // role needs the profile itself, and the model wherever the profile may
+  // send it, but only when it is reached through this profile.
+  const profileArn = `arn:aws:bedrock:${assistantStack.region}:${assistantStack.account}:inference-profile/${ASK_MODEL_ID}`;
+  assistantLambda.addToRolePolicy(new PolicyStatement({ actions: ['bedrock:InvokeModel'], resources: [profileArn] }));
+  assistantLambda.addToRolePolicy(
+    new PolicyStatement({
+      actions: ['bedrock:InvokeModel'],
+      resources: [`arn:aws:bedrock:*::foundation-model/${viaProfile[2]}`, `arn:aws:bedrock:::foundation-model/${viaProfile[2]}`],
+      conditions: { StringEquals: { 'bedrock:InferenceProfileArn': profileArn } },
+    }),
+  );
+} else {
+  assistantLambda.addToRolePolicy(
+    new PolicyStatement({ actions: ['bedrock:InvokeModel'], resources: [`arn:aws:bedrock:${assistantStack.region}::foundation-model/${ASK_MODEL_ID}`] }),
+  );
+}
+backend.assistant.addEnvironment('ASK_MODEL_ID', ASK_MODEL_ID);
+// Questions a day: at one restaurant, and from one login. They cap the bill.
+backend.assistant.addEnvironment('ASK_DAILY_LIMIT', process.env.ASK_DAILY_LIMIT || '300');
+backend.assistant.addEnvironment('ASK_PERSON_DAILY_LIMIT', process.env.ASK_PERSON_DAILY_LIMIT || '100');
+// On staging a sample restaurant with no lists of its own answers from the
+// made-up sample lists, so the staging test can ask the AI a real question
+// as demo staff. Everywhere else Ask exists only where the owner loaded lists.
+backend.assistant.addEnvironment('ASK_SAMPLE_LISTS', process.env.ASK_SAMPLE_LISTS || (process.env.AWS_BRANCH === 'staging' ? 'on' : 'off'));
 
 // ----- The first owner account -----
 // On a brand-new deployment there is no way in until an owner exists. Set

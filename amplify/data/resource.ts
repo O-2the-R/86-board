@@ -2,6 +2,7 @@ import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
 import { staffAdmin } from '../functions/staff-admin/resource';
 import { push } from '../functions/push/resource';
 import { board } from '../functions/board/resource';
+import { assistant } from '../functions/assistant/resource';
 
 // The shared database. Every phone reads the same tables.
 //
@@ -15,6 +16,10 @@ import { board } from '../functions/board/resource';
 //   - The owner can do anything.
 //   - Staff accounts are changed only through the manageStaff mutation,
 //     which runs the staff-admin function.
+//   - A restaurant's lists for Ask (its dishes, allergy marks, recipes) are
+//     private. No staff login can read that table. The assistant function
+//     hands the lists to the people the owner allows, and is the only code
+//     that calls the AI.
 const schema = a
   .schema({
     Restaurant: a
@@ -232,8 +237,78 @@ const schema = a
       .returns(a.json())
       .authorization((allow) => [allow.group('owner')])
       .handler(a.handler.function(push)),
+
+    // ----- Ask, the chat -----
+    // One row per restaurant that has Ask set up; the id is the restaurant
+    // id. `body` is the restaurant's own lists as JSON text
+    // (shared/assistant/catalog.ts has the shape). Private: only the owner
+    // can read a row, and only the assistant function writes one. Staff get
+    // the lists through getAssistant, once the owner sets staffCanUse.
+    AskLists: a
+      .model({
+        restaurantId: a.string().required(),
+        staffCanUse: a.boolean().required(), // false: the owner only
+        body: a.string().required(),
+        items: a.integer(), // how many dishes, drinks and wines
+        notes: a.integer(), // how many house notes
+        loadedAt: a.datetime(),
+        loadedBy: a.string(),
+      })
+      .authorization((allow) => [allow.group('owner').to(['read'])]),
+
+    // How many questions a restaurant asked on one day (id "main:2026-11-20").
+    // Written by the assistant function before every call to the AI; this is
+    // what the daily limit counts. `people` is the same count per login, as
+    // JSON text.
+    AskUsage: a
+      .model({
+        restaurantId: a.string().required(),
+        day: a.string().required(), // YYYY-MM-DD in the restaurant's time zone
+        questions: a.integer().required(),
+        people: a.string(),
+      })
+      .secondaryIndexes((index) => [index('restaurantId').sortKeys(['day'])])
+      .authorization((allow) => [allow.group('owner').to(['read'])]),
+
+    // The lists Ask answers from at one restaurant, for the people allowed to
+    // use it there. Null for everyone else and when Ask is not set up.
+    getAssistant: a
+      .query()
+      .arguments({ restaurantId: a.string().required() })
+      .returns(a.json())
+      .authorization((allow) => [allow.authenticated()])
+      .handler(a.handler.function(assistant)),
+
+    // One question. `turns` is the chat so far as JSON text, `known` the
+    // allergen keys picked for this guest. The function builds everything
+    // else the AI reads on the server: the stored lists and the live board.
+    askAssistant: a
+      .mutation()
+      .arguments({
+        restaurantId: a.string().required(),
+        turns: a.string().required(),
+        known: a.string().array(),
+      })
+      .returns(a.json())
+      .authorization((allow) => [allow.authenticated()])
+      .handler(a.handler.function(assistant)),
+
+    // Owner only. action: status | load | audience | remove | test.
+    // load takes `lists` (the lists file as text) for one restaurant; audience
+    // takes `staffCanUse`; test asks the AI one word to prove AWS lets us.
+    manageAssistant: a
+      .mutation()
+      .arguments({
+        action: a.string().required(),
+        restaurantId: a.string(),
+        lists: a.string(),
+        staffCanUse: a.boolean(),
+      })
+      .returns(a.json())
+      .authorization((allow) => [allow.group('owner')])
+      .handler(a.handler.function(assistant)),
   })
-  .authorization((allow) => [allow.resource(staffAdmin), allow.resource(push), allow.resource(board)]);
+  .authorization((allow) => [allow.resource(staffAdmin), allow.resource(push), allow.resource(board), allow.resource(assistant)]);
 
 export type Schema = ClientSchema<typeof schema>;
 

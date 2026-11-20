@@ -24,6 +24,9 @@ Live: https://main.d2w35vo1xnmx2i.amplifyapp.com
 
 Vendor notes and the vendor report (below) are for the owner and managers only.
 
+Ask (below) is off at a restaurant until the owner loads its lists. Then it is
+for the owner only, until the owner opens it to that restaurant's staff.
+
 The rules are enforced on the server, not just hidden in the app. Every item,
 history entry and staff row carries the groups allowed to read it, so a Main
 Street server's login cannot read the Waterfront board or staff list even with
@@ -73,11 +76,97 @@ the wine list with prices, and house notes such as the bar manual. The three
 sample restaurants have made-up lists (`shared/assistant/sample.ts`). A real
 restaurant's lists and recipes are private and never go in this repo.
 
-Where it runs today: the preview and the public demo, on the sample lists. They
-have no AI, so the answer is looked up on the lists (`shared/assistant/demo.ts`)
+Where it runs: for real logins, with the AI, at every restaurant the owner has
+loaded lists for (next section). The preview and the public demo have no AI:
+there the answer is looked up on the sample lists (`shared/assistant/demo.ts`)
 and everything after that is the real thing: the labels, the warnings, the 86
-marks. For real logins the tab stays hidden until the AI and the private lists
-are connected, which is the next change (see "Next").
+marks.
+
+### Setting Ask up (owner)
+
+Staff screen, **Ask**. One block per restaurant.
+
+1. **Load lists.** One file per restaurant, in the format of the sample file
+   ("Download a sample file" on that screen; `public/ask-lists.example.json`).
+   The app checks the file and says in plain words what is wrong and where
+   ("Crispy Calamari: "kind" must be food, drink or wine."). Nothing is stored
+   until the whole file passes.
+2. **Who can use Ask here.** It starts on **Only me**: the owner's login sees
+   the Ask tab, nobody else does. **Staff here too** opens it to everyone with
+   a login at that restaurant. Loading new lists later keeps this as it is.
+3. **Remove** takes the lists away and Ask with them.
+4. **Test the AI** asks the AI one word and says whether AWS let it through.
+
+The lists are private:
+
+- They live in a table no staff login can read, list or listen to. Only the
+  `assistant` function reads it. It hands the lists to a phone only when that
+  login is allowed to use Ask at that restaurant.
+- Asking for another restaurant's Ask gets the same answer as a restaurant
+  with no lists: "Ask is not set up for this restaurant."
+- The function's log keeps numbers only (how long, how many tokens). Never the
+  chat: a question can name a guest's allergy.
+- A real restaurant's lists never go in this repo. The sample file is made up.
+
+### The AI
+
+Claude Haiku 5.5 on Amazon Bedrock, inside the same AWS account as the rest of
+the app. There is no API key to keep: the `assistant` function's own role is
+allowed to call that one model and nothing else in the app can
+(`amplify/backend.ts`). It is called through the US profile
+(`us.anthropic.claude-haiku-5-5`), so questions stay in US data centers.
+
+One-time step, per AWS account: the model has to be used once by someone with
+AWS Marketplace permissions (the account's admin login has them).
+
+1. AWS console, Amazon Bedrock, region US East (Ohio).
+2. Model catalog, Claude Haiku 5.5, open it in the playground.
+3. Send one message. AWS switches the model on for the account; it can take
+   up to 15 minutes.
+4. In the app: Staff, Ask, **Test the AI**. It should say "The AI answered."
+
+What the AI is given for every question is built on the server, never by the
+phone: the rules, the restaurant's stored lists and house notes, then the 86
+board as the database has it at that second, and the allergies picked for this
+guest. The phone sends only the chat. The first, fixed part is the same from
+question to question, so AWS keeps it ready for five minutes and charges a
+tenth for reading it again.
+
+The answer arrives whole, in a few seconds. It is not typed out word by word
+yet (see "Next").
+
+### What Ask costs, and its limits
+
+Prices are Anthropic's list prices for Claude Haiku 5.5 on Amazon Bedrock,
+US profile, in effect since Oct 7, 2026, per million tokens (a token is a
+piece of a word): **$0.11** read, **$0.55** written, **$0.1375** to read
+something and keep it ready for five minutes, **$0.011** to read it again in
+that time.
+
+An example, for lists that come to 15,000 tokens and an answer of 200:
+
+| | Cost |
+| --- | --- |
+| A first question | about $0.0022 (a fifth of a cent) |
+| A follow-up within five minutes | about $0.0003 |
+| 100 first questions a day, for 30 days | about $6.50 |
+
+Limits, so a stolen login or a mistake cannot run up the bill:
+
+- **300 questions a day per restaurant**, and **100 a day per login**. At the
+  first-question price above, a restaurant at its limit costs about $0.65 a
+  day. Change them with `ASK_DAILY_LIMIT` and `ASK_PERSON_DAILY_LIMIT` in the
+  Amplify app's environment variables.
+- A question is counted before the AI is called, in a way that holds when many
+  arrive at the same moment.
+- A message can be 1,000 characters. An answer is capped at about 400 words.
+- A lists file can be 250,000 bytes, and what the AI reads from it 150,000
+  characters. That keeps every question far below 100,000 tokens, where the
+  price per token goes up.
+
+Where to see it: Staff, Ask shows questions today and in the last 30 days for
+each restaurant. The money is on the AWS bill under the model's own name (it
+is sold through AWS Marketplace), not under Amazon Bedrock.
 
 ## Vendor notes: anything out three days or more
 
@@ -165,11 +254,24 @@ How a change goes live:
      manager at another restaurant hears nothing
    - only a manager can log a vendor note; back on closes history and clears it
    - the morning report link refuses a request without the key
+   - Ask: only the owner can load, share or remove lists; staff cannot read,
+     change or listen to the stored lists or the question counts directly; a
+     server cannot get or ask from another restaurant's lists; what is not a
+     question is refused before it reaches the AI
+   - Ask: a Main Street server asks the AI a real question and a follow-up,
+     and gets both answers in the format the app reads
 4. Try the change on staging yourself, then merge. Merging is the deploy to
    the live board.
 
 The test lives in `staging/` and runs with `npm run test:staging`. It changes
-one Main Street item on staging and puts it back.
+one Main Street item on staging and puts it back, and asks the AI one question.
+
+On staging only, a sample restaurant with no lists of its own answers from the
+made-up sample lists, open to its demo staff. That is how the test can ask a
+real question without the owner's login. (The live site never does this: there
+Ask exists only where the owner loaded lists.) The AI check stays red until
+the AI is switched on for the AWS account (see "The AI" above), and says so.
+If it is red for any other reason, it says that reason instead.
 
 One-time setup (already done once staging exists):
 
@@ -262,7 +364,9 @@ person who runs them, not in the repo.
 | `src/components/Ask.tsx` | Ask, the chat: the thread, the warnings, the ticket of labels, the allergy sheet, the message box. |
 | `shared/assistant/catalog.ts` | What a restaurant loads for Ask: items, allergy marks, house notes. Also the 20 allergens and how an item is matched to the 86 board. |
 | `shared/assistant/check.ts` | The allergy answer for one item: a lookup in the marks. `stamp.ts` turns it into the warnings and the ticket. |
-| `shared/assistant/prompt.ts` | Everything the AI is given before a question. `reply.ts` reads its answer back. |
+| `shared/assistant/prompt.ts` | Everything the AI is given before a question: the fixed part (rules, lists, notes) and the live part (the board, the guest). `reply.ts` reads its answer back. |
+| `shared/assistant/load.ts` | Checks a lists file before it is stored and says what is wrong with it. `public/ask-lists.example.json` is the made-up sample file. |
+| `src/components/AskSetup.tsx` | The owner's Ask setup on the Staff screen: load lists, who can use it, remove, test the AI, questions asked. |
 | `shared/assistant/sample.ts`, `demo.ts` | Made-up lists for the sample restaurants, and the no-AI answers the demo uses. |
 | `shared/assistant/assistant.test.ts` | Proves all of the above. |
 | `src/components/History.tsx` | What was out, how often, for how long. |
@@ -283,7 +387,8 @@ person who runs them, not in the repo.
 | `amplify/functions/board/` | The only code that changes the board: checks who is asking, stamps their name, keeps the history entry in step. `transitions.ts` is the plain logic; `transitions.test.ts` proves it. |
 | `amplify/functions/staff-admin/` | The only code allowed to create, switch off or reset logins. `rules.ts` holds the who-may-do-what rules. |
 | `amplify/functions/push/` | Phone alerts: registers phones and sends the push on every item change. |
-| `amplify/backend.ts` | Wires it together: usernames for sign-in, the first owner account, the table stream into the push function. |
+| `amplify/functions/assistant/` | Ask on the server: the only code that reads the stored lists and the only code that calls the AI. `rules.ts` holds who may use it, what a phone may send, the daily limit and the request to the AI; `handler.test.ts` runs the whole function against a pretend database and a pretend AI. |
+| `amplify/backend.ts` | Wires it together: usernames for sign-in, the first owner account, the table stream into the push function, the assistant function's permission to call the AI. |
 | `amplify.yml` | What Amplify runs on every push: deploy the backend, then build the app. |
 | `src/styles.css` | The look, "The Pass": dark espresso field, amber accent, paper tickets with a red stamp. |
 
@@ -335,11 +440,29 @@ to run any time.
   reply goes to that person, and a wrong address or an item that came back
   overnight never turns into an email nobody checked.
 
+- Ask's AI is Amazon Bedrock, not a key from an AI company. The app already
+  lives in AWS, so there is no secret to store or leak, the bill is one bill,
+  and the permission is one line: this function may call this model.
+- Ask's lists are handed out by a function, not read from the table by the
+  app. A table rule can say who reads a row; it cannot say "only once the
+  owner has opened it", count questions, or keep a manager out. The function
+  can, and it gives everyone else the same answer as "no lists here".
+- Ask is owner-only until the owner opens it, per restaurant. Lists hold
+  recipes and an allergy sheet; sharing them is a decision, not a default.
+- The model is asked not to think before answering. Ask's answers are look-ups
+  in the lists, on a phone, mid-service: quick beats deep. The allergy labels
+  never depended on the AI's reasoning in the first place.
+- The model is a setting (`ASK_MODEL_ID` on the Amplify app), so a newer one
+  is a redeploy, not a code change. The permission follows the setting.
+
 ## Next
 
-1. Ask for real logins: the AI on AWS (Amazon Bedrock), and a private,
-   owner-only way to load a restaurant's own lists and house notes. Then the
-   restaurant's training material as house notes.
-2. Custom domain (omars86board.com) on the Amplify app. Set `APP_URL` on the
+1. Ask: house notes by look-up. Today the notes are read whole before every
+   question, inside the size limit. Sending only the passages a question
+   needs lets a restaurant load its whole training binder.
+2. Ask: a restaurant of its own for a real restaurant's staff. The three
+   restaurants here are samples (see the self-serve plan, pull request #10).
+3. Ask: the answer typed out as it arrives, instead of whole.
+4. Custom domain (omars86board.com) on the Amplify app. Set `APP_URL` on the
    Amplify app at the same time, so the morning email links to it.
-3. Stale-item prompt each morning: still out, or back on?
+5. Stale-item prompt each morning: still out, or back on?

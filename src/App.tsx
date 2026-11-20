@@ -152,6 +152,8 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
   // Ask, the chat: the lists it answers from. undefined while they load, null
   // when Ask is not set up for this restaurant (then there is no Ask tab).
   const [catalog, setCatalog] = useState<AssistantCatalog | null | undefined>(undefined);
+  // goes up when the owner loads, shares or removes lists, so they are read again
+  const [askVersion, setAskVersion] = useState(0);
   const askId = restaurant?.id;
   useEffect(() => {
     let current = true;
@@ -164,7 +166,7 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
     return () => {
       current = false;
     };
-  }, [askId]);
+  }, [askId, askVersion]);
 
   useEffect(() => {
     if (tab === 'ask' && catalog === null) setTab('board');
@@ -275,7 +277,7 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
           {/* The chat stays in place while another tab shows, so a server can check the board and come back. */}
           {catalog && restaurant && (
             <div hidden={tab !== 'ask'}>
-              <Ask key={restaurant.id} restaurantId={restaurant.id} catalog={catalog} items={items} visible={tab === 'ask'} sample={api.mode === 'sample'} />
+              <Ask key={`${restaurant.id}:${askVersion}`} restaurantId={restaurant.id} catalog={catalog} items={items} visible={tab === 'ask'} sample={api.mode === 'sample'} />
             </div>
           )}
           {tab === 'ask' && catalog === undefined && <p className="caption center">Loading…</p>}
@@ -285,7 +287,9 @@ function Shell({ session, restaurants, reloadRestaurants, onSignOut }: ShellProp
             ) : (
               <NoRestaurant session={session} goStaff={() => setTab('staff')} />
             ))}
-          {tab === 'staff' && manages && <Staff session={session} restaurants={restaurants} onDataChanged={() => void reloadRestaurants()} />}
+          {tab === 'staff' && manages && (
+            <Staff session={session} restaurants={restaurants} onDataChanged={() => void reloadRestaurants()} onAskChanged={() => setAskVersion((v) => v + 1)} />
+          )}
 
           {tab === 'ask' ? null : inDemo() ? (
             <footer className="foot">

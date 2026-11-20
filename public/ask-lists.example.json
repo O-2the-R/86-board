@@ -1,0 +1,78 @@
+{
+  "name": "Ask",
+  "venue": "Example Trattoria, a made-up Italian restaurant (this is the sample lists file)",
+  "asOf": "Sample file, made up",
+  "items": [
+    {
+      "name": "Crispy Calamari",
+      "kind": "food",
+      "section": "Starters",
+      "about": "Fried squid, lemon aioli, marinara",
+      "menus": ["dinner", "lunch"],
+      "avoid": {
+        "gluten": "Fried in a wheat batter.",
+        "egg": "The aioli is made with egg.",
+        "shellfish": "Squid.",
+        "nightshade": "Tomato in the marinara.",
+        "citrus": "Lemon in the aioli."
+      },
+      "ask": {
+        "fish": "The fryer is shared with fish some nights."
+      }
+    },
+    {
+      "name": "Chicken Parm",
+      "kind": "food",
+      "section": "Mains",
+      "about": "Breaded chicken, marinara, mozzarella",
+      "avoid": {
+        "gluten": "Breaded.",
+        "dairy": "Mozzarella and parmesan.",
+        "egg": "Egg wash under the breading.",
+        "nightshade": "Tomato."
+      }
+    },
+    {
+      "name": "Special of the Day",
+      "kind": "food",
+      "section": "Mains",
+      "about": "Changes daily. Ask the kitchen what it is tonight.",
+      "offSheet": true
+    },
+    {
+      "name": "Negroni",
+      "kind": "drink",
+      "section": "Cocktails",
+      "about": "Gin, Campari, sweet vermouth, orange peel",
+      "avoid": {
+        "alcohol": "Gin, Campari and vermouth.",
+        "citrus": "Orange peel."
+      }
+    },
+    {
+      "name": "Lemon Basil Soda",
+      "kind": "drink",
+      "section": "No alcohol",
+      "about": "Lemon, basil syrup, soda water",
+      "avoid": {
+        "citrus": "Lemon."
+      }
+    },
+    {
+      "name": "Chianti Classico",
+      "kind": "wine",
+      "section": "Red",
+      "about": "medium-bodied, cherry and spice",
+      "prices": { "glass": 14, "bottle": 54 },
+      "board": "Chianti (glass)"
+    }
+  ],
+  "docs": [
+    {
+      "title": "Bar manual",
+      "asOf": "Fall 2026",
+      "text": "Negroni: 1 oz gin, 1 oz Campari, 1 oz sweet vermouth. Stir over ice, strain over one large cube, orange peel.\nLemon Basil Soda: 1 oz lemon juice, 0.75 oz basil syrup, top with soda water over ice, basil leaf."
+    }
+  ],
+  "starters": ["Egg allergy at table 4. What can they have?", "A red for the Chicken Parm", "How do we make the Negroni?"]
+}
