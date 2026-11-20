@@ -22,6 +22,18 @@ import type { AssistantCatalog } from '../shared/assistant/catalog';
 
 type Tab = 'board' | 'ask' | 'history' | 'staff';
 
+// The restaurants this phone last saw, by name. On a real site the sign-in
+// screen shows these, never the sample restaurants' names.
+const NAMES_KEY = 'eightysix.restaurants';
+function rememberedRestaurants(): Restaurant[] {
+  try {
+    const list: unknown = JSON.parse(readString(NAMES_KEY) ?? '[]');
+    return Array.isArray(list) ? list.filter((r): r is Restaurant => typeof r?.id === 'string' && typeof r?.name === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined); // undefined = still checking
   const [signedOutReason, setSignedOutReason] = useState<string | null>(null);
@@ -38,7 +50,10 @@ export default function App() {
 
   const loadRestaurants = useCallback(async () => {
     try {
-      setRestaurants(await api.listRestaurants());
+      const list = await api.listRestaurants();
+      setRestaurants(list);
+      // Names only, for the sign-in screen's footer next time on this phone.
+      if (api.mode === 'aws') writeString(NAMES_KEY, JSON.stringify(list.map((r) => ({ id: r.id, name: r.name, kind: r.kind }))));
     } catch {
       setRestaurants([]);
     }
@@ -67,7 +82,7 @@ export default function App() {
           </p>
         )}
         <Login
-          restaurants={restaurants.length ? restaurants : SAMPLE_RESTAURANTS}
+          restaurants={restaurants.length ? restaurants : api.mode === 'sample' ? SAMPLE_RESTAURANTS : rememberedRestaurants()}
           onSignedIn={() => {
             setSignedOutReason(null);
             void loadSession();

@@ -33,7 +33,7 @@ const ago = (hours: number) => new Date(Date.now() - hours * HOUR).toISOString()
 const wait = (ms = 120) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 const OWNER: Staff = { username: 'omar', displayName: 'Omar', role: 'owner', restaurantId: 'all', active: true };
-const NO_SETUP_HERE = 'The preview answers from the sample lists. Loading your own lists works on the real site.';
+const NO_SETUP_HERE = 'The preview keeps its sample restaurants and sample lists. Setting up your own works on the real site.';
 
 function seed(): Store {
   const items: MenuItem[] = [];
@@ -379,6 +379,24 @@ export const mockApi: BoardApi = {
   async testAskAi() {
     await wait();
     return { ok: false, summary: 'The preview has no AI behind it. Answers are looked up on the sample lists.' };
+  },
+
+  // The preview and the demo always keep the three sample restaurants.
+  async getSite() {
+    await wait();
+    return { own: null, locked: true, toRemove: { restaurants: 0, items: 0, history: 0, vendors: 0, logins: 0 } };
+  },
+
+  async setUpRestaurant() {
+    throw new Error(NO_SETUP_HERE);
+  },
+
+  async removeSamples() {
+    throw new Error(NO_SETUP_HERE);
+  },
+
+  async syncMenu() {
+    throw new Error(NO_SETUP_HERE);
   },
 
   async listStaff() {

@@ -1,4 +1,4 @@
-// Runs behind changeItem, repairData, saveVendor and logVendorNote. The only
+// Runs behind changeItem, repairData, saveVendor, logVendorNote and syncMenu. The only
 // code that writes to the board tables, so "who may change what" and "keep
 // the history in step" live in one place and are checked on the server, not
 // in the app.
@@ -10,6 +10,8 @@ import { generateClient } from 'aws-amplify/data';
 import type { Schema } from '../../data/resource';
 import { editorGroupsFor, readersFor, vendorIdFor, vendorReadersFor } from '../../../shared/sample-data';
 import { canSendVendorNote, looksLikeEmail } from '../../../shared/vendor-note';
+import { menuFromLists, planMenu, type BoardRow } from '../../../shared/menu';
+import type { AssistantCatalog } from '../../../shared/assistant/catalog';
 import { Refused, canEditItem, parseAction, plan, type ItemState } from './transitions';
 
 const { resourceConfig, libraryOptions } = await getAmplifyDataClientConfig(env);
@@ -245,11 +247,73 @@ async function repairData(actor: Actor, args: { confirm: string }) {
   return { ok: true, ...counts };
 }
 
+// ---------- syncMenu ----------
+
+async function inBatches<T>(rows: T[], size: number, fn: (row: T) => Promise<void>) {
+  for (let i = 0; i < rows.length; i += size) await Promise.all(rows.slice(i, i + size).map(fn));
+}
+
+// Owner only. Makes one restaurant's board menu match the lists loaded for
+// Ask there (shared/menu.ts works out what has to change). An item that
+// stays keeps its state; an item that is gone leaves the board, and if it
+// was 86'd its history entry is closed first, so no entry stays open for good.
+// Safe to run again: it starts from what the board holds at that moment.
+async function syncMenu(actor: Actor, args: { restaurantId: string }) {
+  if (!actor.groups.includes('owner')) throw new Refused('Owner only.');
+  const restaurantId = (args.restaurantId ?? '').trim();
+  const stored = restaurantId ? await client.models.AskLists.get({ id: restaurantId }) : null;
+  if (stored) firstError(stored, 'Reading the lists');
+  if (!stored?.data) throw new Refused('Load lists for this restaurant first. The board menu comes from them.');
+  let wanted;
+  try {
+    wanted = menuFromLists(JSON.parse(stored.data.body) as Pick<AssistantCatalog, 'items'>);
+  } catch {
+    throw new Refused('The stored lists cannot be read. Load them again.');
+  }
+
+  const existing: BoardRow[] = [];
+  let nextToken: string | null | undefined;
+  do {
+    const res = await client.models.MenuItem.listMenuItemByRestaurantId({ restaurantId }, { limit: 500, nextToken: nextToken ?? undefined });
+    firstError(res, 'Reading the board');
+    for (const i of res.data) existing.push({ id: i.id, name: i.name, category: i.category, sortOrder: i.sortOrder, status: i.status, openEventId: i.openEventId });
+    nextToken = res.nextToken;
+  } while (nextToken);
+
+  const plan = planMenu(restaurantId, existing, wanted);
+  const now = new Date().toISOString();
+  const by = await displayNameOf(actor.username);
+  await inBatches(plan.remove, 8, async (row) => {
+    if (row.status === 'out') {
+      const openId = row.openEventId ?? (await findOpenEvent(restaurantId, row.id));
+      if (openId) await closeEvent(openId, now, by);
+    }
+    firstError(await client.models.MenuItem.delete({ id: row.id }), `Removing ${row.name}`);
+  });
+  await inBatches(plan.update, 8, async (row) => {
+    firstError(await client.models.MenuItem.update({ id: row.id, name: row.name, category: row.category, sortOrder: row.sortOrder }), `Updating ${row.name}`);
+  });
+  await inBatches(plan.create, 8, async (row) => {
+    const made = await client.models.MenuItem.create({
+      id: row.id,
+      restaurantId,
+      name: row.name,
+      category: row.category,
+      sortOrder: row.sortOrder,
+      status: 'available',
+      editors: editorGroupsFor(restaurantId),
+      readers: readersFor(restaurantId),
+    });
+    firstError(made, `Adding ${row.name}`);
+  });
+  return { ok: true, total: wanted.length, created: plan.create.length, updated: plan.update.length, removed: plan.remove.length };
+}
+
 // ---------- entry ----------
 
 type AppEvent = AppSyncResolverEvent<Partial<ChangeArgs & VendorArgs & { confirm: string }>>;
-type Operation = 'changeItem' | 'repairData' | 'saveVendor' | 'logVendorNote';
-const OPERATIONS: Operation[] = ['changeItem', 'repairData', 'saveVendor', 'logVendorNote'];
+type Operation = 'changeItem' | 'repairData' | 'saveVendor' | 'logVendorNote' | 'syncMenu';
+const OPERATIONS: Operation[] = ['changeItem', 'repairData', 'saveVendor', 'logVendorNote', 'syncMenu'];
 
 function operationOf(event: AppEvent): Operation {
   const named = (event as { info?: { fieldName?: string } }).info?.fieldName as Operation | undefined;
@@ -257,6 +321,7 @@ function operationOf(event: AppEvent): Operation {
   const args = event.arguments ?? {};
   if (typeof args.confirm === 'string') return 'repairData';
   if (typeof args.email === 'string') return 'saveVendor';
+  if (typeof args.restaurantId === 'string') return 'syncMenu';
   if (typeof args.itemId === 'string' && typeof args.action !== 'string') return 'logVendorNote';
   return 'changeItem';
 }
@@ -273,6 +338,8 @@ export const handler = async (event: AppEvent) => {
         return await saveVendor(actor, event.arguments as VendorArgs);
       case 'logVendorNote':
         return await logVendorNote(actor, event.arguments as { itemId: string });
+      case 'syncMenu':
+        return await syncMenu(actor, event.arguments as { restaurantId: string });
     }
   } catch (e) {
     if (e instanceof Refused) throw e;

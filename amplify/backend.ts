@@ -67,6 +67,10 @@ staffAdminLambda.addToRolePolicy(
   }),
 );
 backend.staffAdmin.addEnvironment('USER_POOL_ID', userPool.userPoolId);
+// "Set up your own restaurant" removes the sample restaurants and the demo
+// logins for good. Staging must keep them (its security test signs in as
+// demo staff), so the set-up is switched off there.
+backend.staffAdmin.addEnvironment('SITE_SETUP', process.env.SITE_SETUP || (process.env.AWS_BRANCH === 'staging' ? 'off' : 'on'));
 
 // ----- Phone alerts follow the board -----
 // Every change to a menu item flows from the table's change stream into the

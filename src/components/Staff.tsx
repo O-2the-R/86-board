@@ -10,6 +10,7 @@ import { initials } from '../lib/format';
 import { CopyLine, CopyMessage } from './CopyLine';
 import { Automations } from './Automations';
 import { AskSetup } from './AskSetup';
+import { OwnRestaurant } from './OwnRestaurant';
 import { cleanUsername, loginMessage, passwordFrom, usernameFor } from '../../shared/logins';
 import { randomInt } from '../lib/random';
 import { inDemo } from '../lib/demo';
@@ -146,7 +147,7 @@ export function Staff({ session, restaurants, onDataChanged, onAskChanged }: Pro
             {owner ? ' across all restaurants' : ''}
           </span>
           <div className="actions">
-            {owner && empty && api.mode === 'aws' && !confirmSeed && (
+            {owner && empty && api.mode === 'aws' && !confirmSeed && !restaurants.some((r) => r.own) && (
               <button type="button" className="btn btn-sm btn-outline" disabled={busy === 'seed'} onClick={() => setConfirmSeed(true)}>
                 Load demo data
               </button>
@@ -259,7 +260,16 @@ export function Staff({ session, restaurants, onDataChanged, onAskChanged }: Pro
         </section>
       ))}
 
-      {/* The preview and the demo answer from the sample lists: nothing to set up there. */}
+      {/* The preview and the demo keep their sample restaurants and sample lists: nothing to set up there. */}
+      {owner && api.mode === 'aws' && (
+        <OwnRestaurant
+          onChanged={() => {
+            onDataChanged();
+            onAskChanged();
+            void load();
+          }}
+        />
+      )}
       {owner && api.mode === 'aws' && <AskSetup restaurants={restaurants} onChanged={onAskChanged} />}
 
       {owner && <Automations />}

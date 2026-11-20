@@ -140,6 +140,8 @@ export function cleanCatalog(restaurantId: string, raw: unknown, today: string):
     docs: rawDocs.map(docOf),
     starters: rawStarters.map((s, i) => line(s, 90, `First question ${i + 1}`, true)),
   };
+  const restaurant = line(raw.restaurant, 40, '"restaurant" (the restaurant\'s name)', false);
+  if (restaurant) catalog.restaurant = restaurant;
 
   const size = byteLength(leadFixed(catalog));
   if (size > LIMITS.leadBytes) {
