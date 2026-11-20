@@ -1,8 +1,9 @@
 // A real restaurant's 86 board gets its menu from the same lists Ask answers
 // from, so the two never disagree: an item 86'd on the board is the item Ask
-// knows. This turns the lists into board rows and works out what has to
-// change on the board to match them. No database here; the board function
-// does the changing.
+// knows. This turns the lists into board rows, works out what has to change
+// on the board to match them, and makes the changes in the right order. The
+// database itself is passed in (the board function has the real one), so the
+// tests run all of it in memory.
 import type { AssistantCatalog, AssistantItem } from './assistant/catalog';
 import { norm } from './assistant/catalog';
 import { itemIdFor } from './sample-data';
@@ -43,9 +44,11 @@ export function menuFromLists(catalog: Pick<AssistantCatalog, 'items'>): WantedR
   return rows;
 }
 
+export type PlannedRow = WantedRow & { id: string };
+
 export interface MenuPlan {
-  create: (WantedRow & { id: string })[];
-  update: (WantedRow & { id: string })[]; // on the board already, under another section, spelling or place
+  create: PlannedRow[];
+  update: PlannedRow[]; // on the board already, under another section, spelling or place
   remove: BoardRow[]; // on the board, no longer on the lists
 }
 
@@ -73,4 +76,33 @@ export function planMenu(restaurantId: string, existing: BoardRow[], wanted: Wan
   }
   plan.remove = existing.filter((r) => !kept.has(r.id));
   return plan;
+}
+
+// The board's table, as far as this needs it. Each call says what it found,
+// because the board is read a moment before it is changed, and that read can
+// be a beat behind: a row removed a second ago can still be listed, and a
+// row just added can be missing.
+export interface MenuDb {
+  create(row: PlannedRow): Promise<boolean>; // false: a row with that id is there already
+  update(row: PlannedRow): Promise<boolean>; // false: the row is gone
+  remove(row: BoardRow): Promise<void>; // fine when the row is already gone
+}
+
+async function inBatches<T>(rows: T[], size: number, fn: (row: T) => Promise<void>): Promise<void> {
+  for (let i = 0; i < rows.length; i += size) await Promise.all(rows.slice(i, i + size).map(fn));
+}
+
+// Carries a plan out: what is gone leaves first, then what stays is brought
+// in line, then what is new is added. A row that turns out to be gone is
+// added afresh; a row that turns out to be there is brought in line. So a
+// stale read, or two people pressing the button at once, still ends with the
+// board matching the lists.
+export async function applyMenu(db: MenuDb, plan: MenuPlan, batch = 8): Promise<void> {
+  await inBatches(plan.remove, batch, (row) => db.remove(row));
+  await inBatches(plan.update, batch, async (row) => {
+    if (!(await db.update(row))) await db.create(row);
+  });
+  await inBatches(plan.create, batch, async (row) => {
+    if (!(await db.create(row))) await db.update(row);
+  });
 }

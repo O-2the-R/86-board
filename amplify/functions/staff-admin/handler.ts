@@ -36,6 +36,7 @@ import {
   vendorReadersFor,
 } from '../../../shared/sample-data';
 import { usernameCandidates } from '../../../shared/logins';
+import { conditionFailed } from '../../../shared/conditional';
 import { Refused, actorFromIdentity, checkCreate, checkDeactivate, checkManage, checkRemove, checkSuggest, cleanUsername, tempPassword, type Actor } from './rules';
 import { ownOf, removeSamples, setUp, whatGoes, type Kind, type Row, type SiteDb } from './site';
 
@@ -370,7 +371,7 @@ async function seedDemo(actor: Actor, args: SeedArgs) {
 // The tables, as far as the clean-up needs them: list every row, remove one.
 interface Table {
   list(options: { limit: number; nextToken?: string; selectionSet: string[] }): Promise<{ data: Row[]; nextToken?: string | null; errors?: { message: string }[] }>;
-  delete(key: { id: string }): Promise<{ errors?: { message: string }[] }>;
+  delete(key: { id: string }): Promise<{ errors?: { message: string; errorType?: string }[] }>;
 }
 const tables = client.models as unknown as Record<Kind, Table>;
 const FIELDS: Record<Kind, string[]> = {
@@ -405,7 +406,11 @@ const siteDb: SiteDb = {
     return out;
   },
   async remove(kind, id) {
-    firstError(await tables[kind].delete({ id }), `Removing ${kind} ${id}`);
+    const res = await tables[kind].delete({ id });
+    // Already gone is fine: the list is read a moment before, and it can
+    // still name a row that the last round (or a second press) removed.
+    if (conditionFailed(res.errors)) return;
+    firstError(res, `Removing ${kind} ${id}`);
   },
 };
 

@@ -10,7 +10,8 @@ import { generateClient } from 'aws-amplify/data';
 import type { Schema } from '../../data/resource';
 import { editorGroupsFor, readersFor, vendorIdFor, vendorReadersFor } from '../../../shared/sample-data';
 import { canSendVendorNote, looksLikeEmail } from '../../../shared/vendor-note';
-import { menuFromLists, planMenu, type BoardRow } from '../../../shared/menu';
+import { applyMenu, menuFromLists, planMenu, type BoardRow, type MenuDb } from '../../../shared/menu';
+import { conditionFailed } from '../../../shared/conditional';
 import type { AssistantCatalog } from '../../../shared/assistant/catalog';
 import { Refused, canEditItem, parseAction, plan, type ItemState } from './transitions';
 
@@ -249,15 +250,50 @@ async function repairData(actor: Actor, args: { confirm: string }) {
 
 // ---------- syncMenu ----------
 
-async function inBatches<T>(rows: T[], size: number, fn: (row: T) => Promise<void>) {
-  for (let i = 0; i < rows.length; i += size) await Promise.all(rows.slice(i, i + size).map(fn));
+// The board's table for shared/menu.ts. The board is read a moment before it
+// is changed, and that read can be a beat behind, so "already gone" and
+// "already there" are answers here, not failures.
+function menuDb(restaurantId: string, now: string, by: string): MenuDb {
+  return {
+    async create(row) {
+      const made = await client.models.MenuItem.create({
+        id: row.id,
+        restaurantId,
+        name: row.name,
+        category: row.category,
+        sortOrder: row.sortOrder,
+        status: 'available',
+        editors: editorGroupsFor(restaurantId),
+        readers: readersFor(restaurantId),
+      });
+      if (conditionFailed(made.errors)) return false;
+      firstError(made, `Adding ${row.name}`);
+      return true;
+    },
+    async update(row) {
+      const changed = await client.models.MenuItem.update({ id: row.id, name: row.name, category: row.category, sortOrder: row.sortOrder });
+      if (conditionFailed(changed.errors)) return false;
+      firstError(changed, `Updating ${row.name}`);
+      return true;
+    },
+    async remove(row) {
+      // An 86'd item leaves the board: close its history entry first, so no
+      // entry stays open for good.
+      if (row.status === 'out') {
+        const openId = row.openEventId ?? (await findOpenEvent(restaurantId, row.id));
+        if (openId) await closeEvent(openId, now, by);
+      }
+      const gone = await client.models.MenuItem.delete({ id: row.id });
+      if (!conditionFailed(gone.errors)) firstError(gone, `Removing ${row.name}`);
+    },
+  };
 }
 
 // Owner only. Makes one restaurant's board menu match the lists loaded for
-// Ask there (shared/menu.ts works out what has to change). An item that
-// stays keeps its state; an item that is gone leaves the board, and if it
-// was 86'd its history entry is closed first, so no entry stays open for good.
-// Safe to run again: it starts from what the board holds at that moment.
+// Ask there (shared/menu.ts works out what has to change, and in which
+// order). An item that stays keeps its state; an item that is gone leaves
+// the board. Safe to run again, and safe to run twice at once: it starts
+// from what the board holds at that moment.
 async function syncMenu(actor: Actor, args: { restaurantId: string }) {
   if (!actor.groups.includes('owner')) throw new Refused('Owner only.');
   const restaurantId = (args.restaurantId ?? '').trim();
@@ -281,31 +317,7 @@ async function syncMenu(actor: Actor, args: { restaurantId: string }) {
   } while (nextToken);
 
   const plan = planMenu(restaurantId, existing, wanted);
-  const now = new Date().toISOString();
-  const by = await displayNameOf(actor.username);
-  await inBatches(plan.remove, 8, async (row) => {
-    if (row.status === 'out') {
-      const openId = row.openEventId ?? (await findOpenEvent(restaurantId, row.id));
-      if (openId) await closeEvent(openId, now, by);
-    }
-    firstError(await client.models.MenuItem.delete({ id: row.id }), `Removing ${row.name}`);
-  });
-  await inBatches(plan.update, 8, async (row) => {
-    firstError(await client.models.MenuItem.update({ id: row.id, name: row.name, category: row.category, sortOrder: row.sortOrder }), `Updating ${row.name}`);
-  });
-  await inBatches(plan.create, 8, async (row) => {
-    const made = await client.models.MenuItem.create({
-      id: row.id,
-      restaurantId,
-      name: row.name,
-      category: row.category,
-      sortOrder: row.sortOrder,
-      status: 'available',
-      editors: editorGroupsFor(restaurantId),
-      readers: readersFor(restaurantId),
-    });
-    firstError(made, `Adding ${row.name}`);
-  });
+  await applyMenu(menuDb(restaurantId, new Date().toISOString(), await displayNameOf(actor.username)), plan);
   return { ok: true, total: wanted.length, created: plan.create.length, updated: plan.update.length, removed: plan.remove.length };
 }
 

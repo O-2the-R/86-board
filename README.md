@@ -205,11 +205,15 @@ Afterwards:
   until then.
 - "Load demo data" is refused from then on: it would mix the samples back in.
 
-It is safe to press again. If the connection drops halfway, the screen
-shows what is left and carries on. Nothing made after the set-up is ever
-removed, however often the button is pressed
-(`amplify/functions/staff-admin/site.ts` holds the rules,
-`site.test.ts` proves each one).
+It is safe to press again, and safe to press twice. If the connection drops
+halfway, the screen shows what is left and carries on. A row that turns out
+to be gone already, or there already, counts as done and not as a failure:
+the database can still list a row for a moment after it was removed. Nothing
+made after the set-up is ever removed, however often the button is pressed
+(`amplify/functions/staff-admin/site.ts` holds the rules, `site.test.ts`
+proves each one, and the two `handler.test.ts` files, there and in
+`functions/board`, run the whole set-up and the board's menu against a
+database in memory).
 
 On the staging copy the set-up is switched off: staging has to keep the
 sample restaurants and demo logins, because its security test signs in as

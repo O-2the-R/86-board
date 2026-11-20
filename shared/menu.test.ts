@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { categoryFor, menuFromLists, planMenu, type BoardRow } from './menu';
+import { applyMenu, categoryFor, menuFromLists, planMenu, type BoardRow, type MenuDb, type PlannedRow } from './menu';
 import { SAMPLE_CATALOGS } from './assistant/sample';
 import type { AssistantItem } from './assistant/catalog';
 
@@ -62,5 +62,86 @@ describe('what has to change on the board', () => {
     const plan = planMenu('main', board, wanted);
     expect(plan.update).toEqual([]);
     expect(plan.remove.map((r) => r.id)).toEqual(['b']);
+  });
+});
+
+describe('making the changes on the board', () => {
+  const wanted = menuFromLists({ items: [item('Calamari', 'food', 'Antipasti'), item('Tiramisù', 'food', 'Dessert'), item('Negroni', 'drink', 'Negronis')] });
+
+  // A board in memory. It answers the way the real table does: a row that is
+  // already there cannot be made again, and a row that is gone cannot be changed.
+  function board(start: BoardRow[]) {
+    const rows = new Map(start.map((r) => [r.id, { ...r }]));
+    const calls: string[] = [];
+    const db: MenuDb = {
+      create: async (r: PlannedRow) => {
+        calls.push(`create ${r.id}`);
+        if (rows.has(r.id)) return false;
+        rows.set(r.id, { ...r, status: 'available' });
+        return true;
+      },
+      update: async (r: PlannedRow) => {
+        calls.push(`update ${r.id}`);
+        const now = rows.get(r.id);
+        if (!now) return false;
+        Object.assign(now, r);
+        return true;
+      },
+      remove: async (r: BoardRow) => {
+        calls.push(`remove ${r.id}`);
+        rows.delete(r.id);
+      },
+    };
+    const names = () => [...rows.values()].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).map((r) => `${r.name} | ${r.category} | ${r.status}`);
+    return { db, rows, calls, names };
+  }
+
+  it('ends with the board matching the lists, and keeps the state of what stays', async () => {
+    const start = [row('main-tiramisu', 'Tiramisu', 'Desserts', 9, 'out'), row('main-old', 'Short Rib', 'Mains', 3)];
+    const b = board(start);
+    await applyMenu(b.db, planMenu('main', start, wanted));
+    expect(b.names()).toEqual(['Calamari | Antipasti | available', "Tiramisù | Dessert | out", 'Negroni | Drinks: Negronis | available']);
+    // what is gone leaves before anything is added
+    expect(b.calls[0]).toBe('remove main-old');
+  });
+
+  it('adds a row afresh when the one it meant to change is already gone', async () => {
+    // the board was read a moment ago; since then the Tiramisu row was removed
+    const read = [row('main-tiramisu', 'Tiramisu', 'Desserts', 9)];
+    const b = board([]);
+    await applyMenu(b.db, planMenu('main', read, wanted));
+    expect(b.calls).toContain('update main-tiramisu');
+    expect(b.names()).toEqual(['Calamari | Antipasti | available', 'Tiramisù | Dessert | available', 'Negroni | Drinks: Negronis | available']);
+  });
+
+  it('brings a row in line when the one it meant to add is already there', async () => {
+    // the read missed a Negroni row that someone else added a moment ago
+    const b = board([row('main-negroni', 'Negroni', 'Bar', 40, 'low')]);
+    await applyMenu(b.db, planMenu('main', [], wanted));
+    expect(b.rows.get('main-negroni')).toMatchObject({ category: 'Drinks: Negronis', sortOrder: 2, status: 'low' });
+    expect(b.rows.size).toBe(3);
+  });
+
+  it('is not troubled by a row that was removed twice', async () => {
+    const read = [row('main-old', 'Short Rib', 'Mains', 3)];
+    const b = board([]); // the row is gone already
+    await applyMenu(b.db, planMenu('main', read, wanted));
+    expect(b.rows.size).toBe(3);
+  });
+
+  it('gives the same board when it is run again', async () => {
+    const b = board([]);
+    await applyMenu(b.db, planMenu('main', [], wanted));
+    const once = b.names();
+    await applyMenu(b.db, planMenu('main', [...b.rows.values()], wanted));
+    expect(b.names()).toEqual(once);
+    expect(b.calls.filter((c) => c.startsWith('create'))).toHaveLength(3);
+  });
+
+  it('works through a long menu in small batches', async () => {
+    const many = menuFromLists({ items: Array.from({ length: 133 }, (_, i) => item(`Dish ${i + 1}`, 'food', 'Menu')) });
+    const b = board([]);
+    await applyMenu(b.db, planMenu('main', [], many));
+    expect(b.rows.size).toBe(133);
   });
 });

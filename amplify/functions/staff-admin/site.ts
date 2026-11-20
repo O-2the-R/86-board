@@ -37,7 +37,7 @@ export interface SiteDb {
   restaurants(): Promise<RestaurantRow[]>;
   saveRestaurant(row: RestaurantRow, isNew: boolean): Promise<void>;
   list(kind: Kind): Promise<Row[]>; // every row of one table
-  remove(kind: Kind, id: string): Promise<void>;
+  remove(kind: Kind, id: string): Promise<void>; // fine when the row is already gone
 }
 
 export interface Logins {
