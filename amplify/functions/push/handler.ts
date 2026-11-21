@@ -128,13 +128,21 @@ interface Message {
   tag: string;
 }
 
-const names = new Map<string, string>(RESTAURANTS.map((r) => [r.id, r.name]));
+// The restaurant's name for the words on the phone. It is read from the
+// database (a real restaurant's name is data, and the owner can change it),
+// and remembered for five minutes. The sample name is only the fallback.
+const names = new Map<string, { name: string; at: number }>();
 async function restaurantName(id: string): Promise<string> {
   const known = names.get(id);
-  if (known) return known;
-  const got = await client.models.Restaurant.get({ id });
-  const name = got.data?.name ?? id;
-  names.set(id, name);
+  if (known && Date.now() - known.at < 5 * 60_000) return known.name;
+  let name = RESTAURANTS.find((r) => r.id === id)?.name ?? id;
+  try {
+    const got = await client.models.Restaurant.get({ id });
+    if (got.data?.name) name = got.data.name;
+  } catch (e) {
+    console.error('push: could not read the restaurant name', e instanceof Error ? e.message : e);
+  }
+  names.set(id, { name, at: Date.now() });
   return name;
 }
 

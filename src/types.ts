@@ -21,6 +21,7 @@ export interface Restaurant {
   id: string;
   name: string;
   kind: string; // "Full service" or "Fast casual"
+  own?: boolean; // the owner's real restaurant, not a sample one
 }
 
 export interface MenuItem {

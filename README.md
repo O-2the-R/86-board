@@ -27,6 +27,9 @@ Vendor notes and the vendor report (below) are for the owner and managers only.
 Ask (below) is off at a restaurant until the owner loads its lists. Then it is
 for the owner only, until the owner opens it to that restaurant's staff.
 
+A new site starts with three sample restaurants. The owner can turn it into
+one real restaurant (see "Your own restaurant" below).
+
 The rules are enforced on the server, not just hidden in the app. Every item,
 history entry and staff row carries the groups allowed to read it, so a Main
 Street server's login cannot read the Waterfront board or staff list even with
@@ -167,6 +170,59 @@ Limits, so a stolen login or a mistake cannot run up the bill:
 Where to see it: Staff, Ask shows questions today and in the last 30 days for
 each restaurant. The money is on the AWS bill under the model's own name (it
 is sold through AWS Marketplace), not under Amazon Bedrock.
+
+## Your own restaurant: from the samples to one real board
+
+A new site comes with three sample restaurants and 60 demo logins ("Load demo
+data"). They are for trying the app. The owner can turn the site into one
+real restaurant, on the Staff screen under **Your restaurant**:
+
+1. **Pick your lists file.** The same file Ask answers from (see "Setting Ask
+   up"). It is checked before anything happens.
+2. **Name your restaurant.** If the file carries a name (`"restaurant"`), it
+   is filled in.
+3. **Set up my restaurant.** The screen says exactly what will be removed and
+   asks once. Then, in this order: the restaurant is named, its lists are
+   loaded (for the owner only), the sample data is removed, and every item on
+   the lists goes on the 86 board.
+
+What is removed, for good: the other sample restaurants, every sample menu
+item, their history and vendor contacts, and every login but the owner's.
+What stays: the owner's login and phone alerts, the automation settings, and
+the lists just loaded. The public demo and the preview keep their samples.
+They never touch a real site's data.
+
+Afterwards:
+
+- The board's menu **is** the lists. Load new lists under Ask and the board
+  follows: new items appear, items that are gone leave (an 86 on one of them
+  is closed in the history first), and items that stay keep their state.
+  Food keeps its section ("Antipasti"); drinks and wine say what they are
+  ("Drinks: Negronis", "Wine: Red").
+- Because the board and Ask use the same names, an item 86'd on the board is
+  86'd in Ask's answers.
+- Add your team under Staff, Add a person. Nobody but the owner has a login
+  until then.
+- "Load demo data" is refused from then on: it would mix the samples back in.
+
+It is safe to press again, and safe to press twice. If the connection drops
+halfway, the screen shows what is left and carries on. A row that turns out
+to be gone already, or there already, counts as done and not as a failure:
+the database can still list a row for a moment after it was removed. Nothing
+made after the set-up is ever removed, however often the button is pressed
+(`amplify/functions/staff-admin/site.ts` holds the rules, `site.test.ts`
+proves each one, and the two `handler.test.ts` files, there and in
+`functions/board`, run the whole set-up and the board's menu against a
+database in memory).
+
+On the staging copy the set-up is switched off: staging has to keep the
+sample restaurants and demo logins, because its security test signs in as
+them. Staging still counts what the set-up would remove, and "Put on the 86
+board" can be tried there on a sample restaurant.
+
+The restaurant lives in the first of the three slots. A slot is only an id
+that decides which login groups belong to a restaurant. The name people see
+is data, so a real restaurant's name and menu are never in this repo.
 
 ## Vendor notes: anything out three days or more
 
@@ -366,7 +422,9 @@ person who runs them, not in the repo.
 | `shared/assistant/check.ts` | The allergy answer for one item: a lookup in the marks. `stamp.ts` turns it into the warnings and the ticket. |
 | `shared/assistant/prompt.ts` | Everything the AI is given before a question: the fixed part (rules, lists, notes) and the live part (the board, the guest). `reply.ts` reads its answer back. |
 | `shared/assistant/load.ts` | Checks a lists file before it is stored and says what is wrong with it. `public/ask-lists.example.json` is the made-up sample file. |
-| `src/components/AskSetup.tsx` | The owner's Ask setup on the Staff screen: load lists, who can use it, remove, test the AI, questions asked. |
+| `src/components/AskSetup.tsx` | The owner's Ask setup on the Staff screen: load lists, who can use it, put them on the 86 board, remove, test the AI, questions asked. |
+| `src/components/OwnRestaurant.tsx` | "Your restaurant" on the Staff screen: from the three samples to one real restaurant. |
+| `shared/menu.ts` | Turns the lists into board rows and works out what has to change on a board to match them. |
 | `shared/assistant/sample.ts`, `demo.ts` | Made-up lists for the sample restaurants, and the no-AI answers the demo uses. |
 | `shared/assistant/assistant.test.ts` | Proves all of the above. |
 | `src/components/History.tsx` | What was out, how often, for how long. |
@@ -385,7 +443,7 @@ person who runs them, not in the repo.
 | `amplify/auth/resource.ts` | The Cognito user pool and its groups (`owner`, `main-kitchen`, `water-server`, ...). |
 | `amplify/data/resource.ts` | The database tables and who may read or change each one. |
 | `amplify/functions/board/` | The only code that changes the board: checks who is asking, stamps their name, keeps the history entry in step. `transitions.ts` is the plain logic; `transitions.test.ts` proves it. |
-| `amplify/functions/staff-admin/` | The only code allowed to create, switch off or reset logins. `rules.ts` holds the who-may-do-what rules. |
+| `amplify/functions/staff-admin/` | The only code allowed to create, switch off or reset logins. `rules.ts` holds the who-may-do-what rules. `site.ts` is "set up your own restaurant": what it names, what it removes and what it never touches. |
 | `amplify/functions/push/` | Phone alerts: registers phones and sends the push on every item change. |
 | `amplify/functions/assistant/` | Ask on the server: the only code that reads the stored lists and the only code that calls the AI. `rules.ts` holds who may use it, what a phone may send, the daily limit and the request to the AI; `handler.test.ts` runs the whole function against a pretend database and a pretend AI. |
 | `amplify/backend.ts` | Wires it together: usernames for sign-in, the first owner account, the table stream into the push function, the assistant function's permission to call the AI. |
@@ -417,6 +475,15 @@ to run any time.
 ## Decisions
 
 - Three boards, one login system. Each restaurant has its own menu and staff.
+  A real site can be a single restaurant: the owner sets it up in the first
+  slot and removes the samples.
+- A real restaurant's board menu comes from its Ask lists, not from a second
+  list. One file to keep up to date, and the board and the chat can never
+  disagree about what an item is called.
+- Setting up your own restaurant deletes the sample data instead of hiding
+  it. Sixty switched-off demo logins and two empty restaurants would be in
+  the owner's way for good. The rule that people are switched off, never
+  deleted, protects real history; sample history is not that.
 - The board holds a live connection (AppSync subscriptions). Every change the
   board function saves is pushed to each phone watching that restaurant, and
   the server only sends a phone the items its groups may read. An open board
@@ -460,8 +527,8 @@ to run any time.
 1. Ask: house notes by look-up. Today the notes are read whole before every
    question, inside the size limit. Sending only the passages a question
    needs lets a restaurant load its whole training binder.
-2. Ask: a restaurant of its own for a real restaurant's staff. The three
-   restaurants here are samples (see the self-serve plan, pull request #10).
+2. More than one real restaurant on a site. Today a site is the three
+   samples or one real restaurant (see the self-serve plan, pull request #10).
 3. Ask: the answer typed out as it arrives, instead of whole.
 4. Custom domain (omars86board.com) on the Amplify app. Set `APP_URL` on the
    Amplify app at the same time, so the morning email links to it.

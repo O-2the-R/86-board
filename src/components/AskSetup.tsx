@@ -32,12 +32,16 @@ export function AskSetup({ restaurants, onChanged }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // "test", or "<restaurant>:<action>"
   const [picked, setPicked] = useState<Picked | null>(null);
-  const [confirm, setConfirm] = useState<{ restaurantId: string; what: 'open' | 'remove' } | null>(null);
+  const [confirm, setConfirm] = useState<{ restaurantId: string; what: 'open' | 'remove' | 'board' } | null>(null);
+  const [boardNote, setBoardNote] = useState<{ restaurantId: string; text: string } | null>(null);
   const [problem, setProblem] = useState<{ restaurantId: string; text: string } | null>(null);
   const [test, setTest] = useState<AskAiTest | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const pickFor = useRef('');
 
+  // Read again whenever the set of restaurants changes (the owner set up
+  // their own, or the sample ones were removed).
+  const ids = restaurants.map((r) => r.id + (r.own ? '*' : '')).join(',');
   useEffect(() => {
     let live = true;
     api.getAskSetup().then(
@@ -47,7 +51,7 @@ export function AskSetup({ restaurants, onChanged }: Props) {
     return () => {
       live = false;
     };
-  }, []);
+  }, [ids]);
 
   const nameOf = (id: string) => restaurants.find((r) => r.id === id)?.name ?? id;
   const put = (s: Setup) => setRows((now) => (now ? now.map((r) => (r.restaurantId === s.restaurantId ? s : r)) : [s]));
@@ -92,9 +96,31 @@ export function AskSetup({ restaurants, onChanged }: Props) {
     }
   }
 
+  // The owner's own restaurant takes its 86 board menu from these lists, so
+  // new lists update the board in the same go.
   async function load() {
     if (!picked) return;
-    if (await change(picked.restaurantId, 'load', () => api.loadAskLists(picked.restaurantId, picked.text))) setPicked(null);
+    const id = picked.restaurantId;
+    if (!(await change(id, 'load', () => api.loadAskLists(id, picked.text)))) return;
+    setPicked(null);
+    if (restaurants.find((r) => r.id === id)?.own) await updateBoard(id);
+  }
+
+  async function updateBoard(restaurantId: string) {
+    setBusy(`${restaurantId}:board`);
+    setProblem(null);
+    setBoardNote(null);
+    try {
+      const b = await api.syncMenu(restaurantId);
+      const text = b.created + b.updated + b.removed === 0 ? `The 86 board already matches: ${b.total} items.` : `The 86 board now has ${b.total} items: ${b.created} added, ${b.removed} removed.`;
+      setBoardNote({ restaurantId, text });
+      onChanged();
+    } catch (e) {
+      setProblem({ restaurantId, text: e instanceof Error && e.message ? e.message : 'The board was not updated. Try again.' });
+    } finally {
+      setBusy(null);
+      setConfirm(null);
+    }
   }
 
   async function setAudience(restaurantId: string, staffCanUse: boolean) {
@@ -213,14 +239,21 @@ export function AskSetup({ restaurants, onChanged }: Props) {
                   <span>
                     {confirm.what === 'open'
                       ? `Open Ask to the staff at ${place}? Everyone with a login there will get answers from these lists.`
-                      : `Remove the lists for ${place}? Ask goes away there until you load lists again.`}
+                      : confirm.what === 'board'
+                        ? `Make the 86 board at ${place} match these lists? Items that are not on the lists leave the board.`
+                        : `Remove the lists for ${place}? Ask goes away there until you load lists again.`}
                   </span>
                   <div className="actions">
                     <button type="button" className="btn btn-sm btn-text" onClick={() => setConfirm(null)}>
                       Cancel
                     </button>
-                    <button type="button" className="btn btn-sm" disabled={busy !== null} onClick={() => void (confirm.what === 'open' ? setAudience(id, true) : remove(id))}>
-                      {working ? 'Saving…' : confirm.what === 'open' ? 'Open to staff' : 'Remove the lists'}
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      disabled={busy !== null}
+                      onClick={() => void (confirm.what === 'open' ? setAudience(id, true) : confirm.what === 'board' ? updateBoard(id) : remove(id))}
+                    >
+                      {working ? 'Saving…' : confirm.what === 'open' ? 'Open to staff' : confirm.what === 'board' ? 'Update the board' : 'Remove the lists'}
                     </button>
                   </div>
                 </div>
@@ -243,6 +276,8 @@ export function AskSetup({ restaurants, onChanged }: Props) {
                 </div>
               )}
 
+              {boardNote?.restaurantId === id && <span className="caption ok-text">{boardNote.text}</span>}
+
               {problem?.restaurantId === id && (
                 <p className="error" role="alert">
                   {problem.text}
@@ -253,6 +288,11 @@ export function AskSetup({ restaurants, onChanged }: Props) {
                 <button type="button" className="btn btn-sm btn-outline" disabled={busy !== null} onClick={() => choose(id)}>
                   {own ? 'Load new lists' : 'Load lists'}
                 </button>
+                {own && (
+                  <button type="button" className="btn btn-sm btn-text" disabled={busy !== null} onClick={() => setConfirm({ restaurantId: id, what: 'board' })}>
+                    Put on the 86 board
+                  </button>
+                )}
                 {own && (
                   <button type="button" className="btn btn-sm btn-text" disabled={busy !== null} onClick={() => setConfirm({ restaurantId: id, what: 'remove' })}>
                     Remove

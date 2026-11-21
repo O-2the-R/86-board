@@ -36,7 +36,9 @@ import {
   vendorReadersFor,
 } from '../../../shared/sample-data';
 import { usernameCandidates } from '../../../shared/logins';
+import { conditionFailed } from '../../../shared/conditional';
 import { Refused, actorFromIdentity, checkCreate, checkDeactivate, checkManage, checkRemove, checkSuggest, cleanUsername, tempPassword, type Actor } from './rules';
+import { ownOf, removeSamples, setUp, whatGoes, type Kind, type Row, type SiteDb } from './site';
 
 const { resourceConfig, libraryOptions } = await getAmplifyDataClientConfig(env);
 Amplify.configure(resourceConfig, libraryOptions);
@@ -221,6 +223,9 @@ async function inBatches<T>(items: T[], size: number, fn: (item: T) => Promise<v
 async function seedDemo(actor: Actor, args: SeedArgs) {
   if (!actor.isOwner) throw new Refused('Owner only.');
   if (args.confirm !== 'LOAD') throw new Refused('Type LOAD to confirm.');
+  if (ownOf(await siteDb.restaurants())) {
+    throw new Refused('This site has its own restaurant now. Demo data would mix the sample restaurants and the demo logins into it.');
+  }
   const now = Date.now();
   const ago = (hours: number) => new Date(now - hours * HOUR).toISOString();
   const counts = { restaurants: 0, items: 0, events: 0, staff: 0 };
@@ -361,20 +366,107 @@ async function seedDemo(actor: Actor, args: SeedArgs) {
   return { ok: true, ...counts, demoPassword: DEMO_PASSWORD };
 }
 
+// ---------- manageSite: from the samples to one real restaurant ----------
+
+// The tables, as far as the clean-up needs them: list every row, remove one.
+interface Table {
+  list(options: { limit: number; nextToken?: string; selectionSet: string[] }): Promise<{ data: Row[]; nextToken?: string | null; errors?: { message: string }[] }>;
+  delete(key: { id: string }): Promise<{ errors?: { message: string; errorType?: string }[] }>;
+}
+const tables = client.models as unknown as Record<Kind, Table>;
+const FIELDS: Record<Kind, string[]> = {
+  Staff: ['id', 'restaurantId', 'role', 'createdAt'],
+  MenuItem: ['id', 'restaurantId', 'createdAt'],
+  EightySixEvent: ['id', 'restaurantId', 'createdAt'],
+  Vendor: ['id', 'restaurantId', 'createdAt'],
+  PushSubscription: ['id', 'restaurantId', 'createdAt'],
+  AskLists: ['id', 'restaurantId', 'createdAt'],
+  AskUsage: ['id', 'restaurantId', 'createdAt'],
+  Restaurant: ['id', 'createdAt'],
+};
+
+const siteDb: SiteDb = {
+  async restaurants() {
+    const res = await client.models.Restaurant.list({ limit: 100 });
+    firstError(res, 'Listing restaurants');
+    return res.data.map((r) => ({ id: r.id, name: r.name, kind: r.kind, sortOrder: r.sortOrder, own: r.own, ownSince: r.ownSince, samplesGone: r.samplesGone }));
+  },
+  async saveRestaurant(row, isNew) {
+    firstError(isNew ? await client.models.Restaurant.create(row) : await client.models.Restaurant.update(row), 'Saving the restaurant');
+  },
+  async list(kind) {
+    const out: Row[] = [];
+    let nextToken: string | null | undefined;
+    do {
+      const res = await tables[kind].list({ limit: 500, nextToken: nextToken ?? undefined, selectionSet: FIELDS[kind] });
+      firstError(res, `Listing ${kind}`);
+      out.push(...res.data);
+      nextToken = res.nextToken;
+    } while (nextToken);
+    return out;
+  },
+  async remove(kind, id) {
+    const res = await tables[kind].delete({ id });
+    // Already gone is fine: the list is read a moment before, and it can
+    // still name a row that the last round (or a second press) removed.
+    if (conditionFailed(res.errors)) return;
+    firstError(res, `Removing ${kind} ${id}`);
+  },
+};
+
+const siteLogins = {
+  async remove(username: string) {
+    try {
+      await cognito.send(new AdminDeleteUserCommand({ UserPoolId: USER_POOL_ID, Username: username }));
+    } catch (e) {
+      if (!(e instanceof UserNotFoundException)) throw e;
+    }
+  },
+};
+
+interface SiteArgs {
+  action: string;
+  name?: string | null;
+}
+
+// Set in backend.ts. The staging copy keeps the sample restaurants and the
+// demo logins: its security test signs in as them. So there the one-way
+// set-up is switched off; counting what it would remove still works.
+const SITE_LOCKED = process.env.SITE_SETUP === 'off';
+
+async function manageSite(actor: Actor, args: SiteArgs) {
+  if (!actor.isOwner) throw new Refused('Owner only.');
+  const now = new Date().toISOString();
+  if (args.action === 'status') {
+    const { own, counts } = await whatGoes(siteDb, actor, now);
+    return { ok: true, own: own ? { id: own.id, name: own.name } : null, locked: SITE_LOCKED, toRemove: counts };
+  }
+  if (SITE_LOCKED && (args.action === 'setUp' || args.action === 'removeSamples')) {
+    throw new Refused('This is the staging copy. It keeps the sample restaurants so its security test can run. Set up your restaurant on the live site.');
+  }
+  if (args.action === 'setUp') {
+    const own = await setUp(siteDb, args.name, now);
+    return { ok: true, own: { id: own.id, name: own.name } };
+  }
+  if (args.action === 'removeSamples') return { ok: true, ...(await removeSamples(siteDb, siteLogins, actor)) };
+  throw new Refused('Unknown action.');
+}
+
 // ---------- entry ----------
 
 // The API does not always pass event.info, so the operation is told apart
-// by its arguments: seedDemo has `confirm`, manageStaff has `action`.
-function operationOf(event: AppSyncResolverEvent<ManageArgs | SeedArgs>): 'manageStaff' | 'seedDemo' | 'unknown' {
+// by its arguments: seedDemo has `confirm`, manageStaff has `action` and a
+// `username`, manageSite has `action` alone.
+function operationOf(event: AppSyncResolverEvent<ManageArgs | SeedArgs | SiteArgs>): 'manageStaff' | 'seedDemo' | 'manageSite' | 'unknown' {
   const named = (event as { info?: { fieldName?: string } }).info?.fieldName;
-  if (named === 'manageStaff' || named === 'seedDemo') return named;
+  if (named === 'manageStaff' || named === 'seedDemo' || named === 'manageSite') return named;
   const args = (event.arguments ?? {}) as Partial<ManageArgs & SeedArgs>;
-  if (typeof args.action === 'string') return 'manageStaff';
+  if (typeof args.action === 'string') return typeof args.username === 'string' ? 'manageStaff' : 'manageSite';
   if (typeof args.confirm === 'string') return 'seedDemo';
   return 'unknown';
 }
 
-export const handler = async (event: AppSyncResolverEvent<ManageArgs | SeedArgs>) => {
+export const handler = async (event: AppSyncResolverEvent<ManageArgs | SeedArgs | SiteArgs>) => {
   const actor = actorFrom(event);
   try {
     switch (operationOf(event)) {
@@ -382,6 +474,8 @@ export const handler = async (event: AppSyncResolverEvent<ManageArgs | SeedArgs>
         return await manageStaff(actor, event.arguments as ManageArgs);
       case 'seedDemo':
         return await seedDemo(actor, event.arguments as SeedArgs);
+      case 'manageSite':
+        return await manageSite(actor, event.arguments as SiteArgs);
       default:
         throw new Refused('Unknown operation.');
     }

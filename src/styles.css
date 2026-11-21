@@ -1267,6 +1267,16 @@ button.row:active {
   text-underline-offset: 2px;
 }
 
+/* What the "Your restaurant" set-up has done so far, one line each. */
+.own-steps {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+}
+
 .ok-text {
   color: var(--sage);
 }

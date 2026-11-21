@@ -27,6 +27,9 @@ const schema = a
         name: a.string().required(),
         kind: a.string().required(),
         sortOrder: a.integer(),
+        own: a.boolean(), // the owner's real restaurant, not a sample one (set by manageSite)
+        ownSince: a.datetime(), // when it became that: what is older was sample data
+        samplesGone: a.boolean(), // the sample data has been removed, all of it
       })
       .authorization((allow) => [allow.authenticated().to(['read']), allow.group('owner')]),
 
@@ -161,6 +164,27 @@ const schema = a
       .returns(a.json())
       .authorization((allow) => [allow.groups(['owner', 'main-manager', 'water-manager', 'counter-manager'])])
       .handler(a.handler.function(staffAdmin)),
+
+    // Owner only. Turns the site from the three sample restaurants into one
+    // real restaurant. action: status | setUp (with `name`) | removeSamples.
+    // removeSamples takes away the sample restaurants, their menus, history
+    // and vendor contacts, and every login but the owner's. Nothing made
+    // after the set-up is touched.
+    manageSite: a
+      .mutation()
+      .arguments({ action: a.string().required(), name: a.string() })
+      .returns(a.json())
+      .authorization((allow) => [allow.group('owner')])
+      .handler(a.handler.function(staffAdmin)),
+
+    // Owner only. Makes one restaurant's board menu match its Ask lists: adds
+    // what is new, removes what is gone, keeps the state of what stays.
+    syncMenu: a
+      .mutation()
+      .arguments({ restaurantId: a.string().required() })
+      .returns(a.json())
+      .authorization((allow) => [allow.group('owner')])
+      .handler(a.handler.function(board)),
 
     // Owner only. Loads the three sample restaurants, menus, history and 60 staff.
     seedDemo: a

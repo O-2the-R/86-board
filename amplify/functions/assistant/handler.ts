@@ -16,6 +16,7 @@ import type { AssistantCatalog, BoardNow } from '../../../shared/assistant/catal
 import { NOTHING_OUT, boardNow } from '../../../shared/assistant/catalog';
 import { BadLists, cleanCatalog, countsOf, parseLists } from '../../../shared/assistant/load';
 import { SAMPLE_CATALOGS } from '../../../shared/assistant/sample';
+import { conditionFailed, type GqlErrors } from '../../../shared/conditional';
 import { TZ } from '../push/report';
 import {
   DEFAULT_LIMITS,
@@ -155,8 +156,8 @@ const BUMP = /* GraphQL */ `
   }
 `;
 
-type GqlErrors = { message?: string; errorType?: string }[];
-const lostTheRace = (errors: GqlErrors): boolean => errors.some((e) => /ConditionalCheckFailed|conditional request failed/i.test(`${e.errorType ?? ''} ${e.message ?? ''}`));
+// someone else's question was counted first: read the count again
+const lostTheRace = conditionFailed;
 
 async function countQuestion(restaurantId: string, day: string, username: string): Promise<void> {
   const id = usageIdFor(restaurantId, day);

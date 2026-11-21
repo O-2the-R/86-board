@@ -95,6 +95,22 @@ export interface AskSetup {
   dailyLimit: number;
 }
 
+// The owner's view of the site: their own restaurant if they set one up, and
+// what "remove the sample data" would take away right now.
+export interface SiteStatus {
+  own: { id: string; name: string } | null;
+  locked: boolean; // the staging copy: it keeps the sample restaurants for its security test
+  toRemove: { restaurants: number; items: number; history: number; vendors: number; logins: number };
+}
+
+// What changed on a board when its menu was made to match the lists.
+export interface MenuSync {
+  total: number; // items on the board now
+  created: number;
+  updated: number;
+  removed: number;
+}
+
 export interface AskAiTest {
   ok: boolean;
   problem?: 'off' | 'denied' | 'busy' | 'other'; // off: the model is not switched on for the AWS account yet
@@ -152,6 +168,16 @@ export interface BoardApi {
   removeAskLists(restaurantId: string): Promise<AskSetup>;
   // asks the AI one word, to show whether AWS lets this app call it
   testAskAi(): Promise<AskAiTest>;
+
+  // From the sample restaurants to one real restaurant (owner only).
+  getSite(): Promise<SiteStatus>;
+  // names the owner's restaurant (again: renames it)
+  setUpRestaurant(name: string): Promise<{ id: string; name: string }>;
+  // removes the sample restaurants, their data and every login but the owner's;
+  // works in rounds: call again until `done`
+  removeSamples(): Promise<{ done: boolean; left: number }>;
+  // makes a restaurant's board menu match the lists loaded for Ask there
+  syncMenu(restaurantId: string): Promise<MenuSync>;
 
   // staff admin
   listStaff(): Promise<Staff[]>;

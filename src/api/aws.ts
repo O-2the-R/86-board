@@ -4,7 +4,7 @@ import { CONNECTION_STATE_CHANGE, generateClient } from 'aws-amplify/data';
 import { Hub } from 'aws-amplify/utils';
 import { confirmSignIn, fetchAuthSession, getCurrentUser, signIn, signOut } from 'aws-amplify/auth';
 import type { Schema } from '../../amplify/data/resource';
-import type { AskAiTest, AskResult, AskSetup, BoardApi, IntegrationSettings, LiveHandlers, ManageStaffInput, ManageStaffResult, PushSubscriptionInput, RepairResult, SeedResult, SignInResult } from './types';
+import type { AskAiTest, AskResult, AskSetup, BoardApi, IntegrationSettings, LiveHandlers, ManageStaffInput, ManageStaffResult, MenuSync, PushSubscriptionInput, RepairResult, SeedResult, SignInResult, SiteStatus } from './types';
 import { linkStateOf } from '../lib/live';
 import { REPORT_URL } from '../amplify';
 import { newKey } from '../lib/random';
@@ -153,7 +153,7 @@ export const awsApi: BoardApi = {
     return rows
       .slice()
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-      .map((r): Restaurant => ({ id: r.id, name: r.name, kind: r.kind }));
+      .map((r): Restaurant => ({ id: r.id, name: r.name, kind: r.kind, own: r.own === true }));
   },
 
   async listItems(restaurantId) {
@@ -271,6 +271,32 @@ export const awsApi: BoardApi = {
     return { ok: Boolean(out.ok), problem: out.problem, summary: out.summary, detail: out.detail, model: out.model };
   },
 
+  async getSite(): Promise<SiteStatus> {
+    const out = await manageSite<{ own: SiteStatus['own']; locked?: boolean; toRemove: Record<string, number> }>({ action: 'status' });
+    const n = out.toRemove ?? {};
+    return {
+      own: out.own ?? null,
+      locked: Boolean(out.locked),
+      toRemove: { restaurants: n.Restaurant ?? 0, items: n.MenuItem ?? 0, history: n.EightySixEvent ?? 0, vendors: n.Vendor ?? 0, logins: n.Staff ?? 0 },
+    };
+  },
+
+  async setUpRestaurant(name) {
+    return (await manageSite<{ own: { id: string; name: string } }>({ action: 'setUp', name })).own;
+  },
+
+  async removeSamples() {
+    const out = await manageSite<{ done: boolean; left: number }>({ action: 'removeSamples' });
+    return { done: Boolean(out.done), left: out.left ?? 0 };
+  },
+
+  async syncMenu(restaurantId): Promise<MenuSync> {
+    const res = await client().mutations.syncMenu({ restaurantId });
+    if (res.errors?.length) throw new Error(res.errors.map((e) => e.message).join(' '));
+    const out = parseJson<MenuSync>(res.data);
+    return { total: out.total ?? 0, created: out.created ?? 0, updated: out.updated ?? 0, removed: out.removed ?? 0 };
+  },
+
   async listStaff() {
     const rows = await allPages('Loading staff', (nextToken) => client().models.Staff.list({ limit: 500, nextToken }));
     return rows.map(toStaff);
@@ -333,6 +359,16 @@ export const awsApi: BoardApi = {
 };
 
 const INTEGRATION_ID = 'n8n';
+
+// ----- the site: from the samples to one real restaurant (owner) -----
+async function manageSite<T>(args: { action: string; name?: string }): Promise<T> {
+  const res = await client().mutations.manageSite(args);
+  // a refusal is the function's own sentence: show it as it is
+  if (res.errors?.length) throw new Error(res.errors.map((e) => e.message).join(' '));
+  const out = parseJson<T | null>(res.data);
+  if (!out) throw new Error('That did not finish. Try again.');
+  return out;
+}
 
 // ----- Ask setup (owner) -----
 type AskSetupRow = { [K in keyof AskSetup]: AskSetup[K] | null };

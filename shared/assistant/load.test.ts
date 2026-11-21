@@ -54,6 +54,14 @@ describe('loading a restaurant\'s lists', () => {
     expect(Object.keys(lists).sort()).toEqual(['asOf', 'docs', 'items', 'name', 'restaurantId', 'starters', 'venue']);
   });
 
+  it('carries the restaurant\'s own name when the file gives one', () => {
+    const raw = good();
+    raw.restaurant = '  Trattoria   Uno ';
+    expect(cleanCatalog('main', raw, TODAY).restaurant).toBe('Trattoria Uno');
+    raw.restaurant = 'x'.repeat(41);
+    expect(why(raw)).toMatch(/"restaurant".* is too long/);
+  });
+
   it('says what is wrong, and where, in plain words', () => {
     expect(why([])).toMatch(/one set of lists/);
     expect(why({ venue: 'x' })).toMatch(/no "items"/);

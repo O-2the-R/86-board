@@ -189,6 +189,21 @@ describe.skipIf(problem)('staging: who can do what', () => {
     });
   });
 
+  // "Set up your own restaurant" removes the sample restaurants for good, and
+  // syncMenu rewrites a board's menu. Both are the owner's alone.
+  it('only the owner can set up the restaurant, remove the samples, rename a restaurant or rewrite a board menu', async () => {
+    for (const who of [MANAGER, SERVER]) {
+      for (const action of ['status', 'setUp', 'removeSamples']) {
+        expect(refused(await gql(out, who, 'mutation($a: String!) { manageSite(action: $a, name: "Mine") }', { a: action }), 'manageSite'), `${who} ${action}`).toBe(true);
+      }
+      expect(refused(await gql(out, who, 'mutation { syncMenu(restaurantId: "main") }'), 'syncMenu'), who).toBe(true);
+      // would change nothing even if it got through
+      expect(refused(await gql(out, who, 'mutation { updateRestaurant(input: { id: "main", sortOrder: 0 }) { id } }'), 'updateRestaurant'), who).toBe(true);
+    }
+    const names = await gql<{ listRestaurants: { items: { id: string; name: string }[] } }>(out, SERVER, 'query { listRestaurants(limit: 50) { items { id name } } }');
+    expect(names.data?.listRestaurants.items.find((r) => r.id === 'main')?.name).toBe('Main Street');
+  });
+
   // Ask: a restaurant's lists are private, and the AI costs money per question.
   describe('Ask: the private lists and the AI', () => {
     const json = <T>(v: unknown): T | null => (typeof v === 'string' ? (JSON.parse(v) as T) : ((v ?? null) as T | null));

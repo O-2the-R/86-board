@@ -65,6 +65,7 @@ export interface AssistantDoc {
 
 export interface AssistantCatalog {
   restaurantId: string;
+  restaurant?: string; // the restaurant's own name, offered when the owner sets up their restaurant from this file
   name: string; // what staff call the assistant; also the tab's title
   venue: string; // one line for the AI: "Main Street, a full-service Italian-American restaurant"
   asOf: string; // when the lists were loaded, in words; shown under the greeting
