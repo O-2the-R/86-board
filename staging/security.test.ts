@@ -293,12 +293,19 @@ describe.skipIf(problem)('staging: who can do what', () => {
       const a2 = json<{ text: string; truncated: boolean }>(r2.data?.askAssistant);
 
       const said = [r1, r2].map((r) => r.errors[0]?.message ?? '').filter(Boolean);
-      // Anything but "the AI is not switched on" is a fault in the app, shown as it is.
-      const fault = said.find((m) => !m.includes('not switched on'));
+      // AWS can say no in two ways that are not a fault in the app. Anything else is, and is shown as it is.
+      const notOpen = (m: string) => m.includes('AWS has not opened it');
+      const notOn = (m: string) => m.includes('not switched on');
+      const fault = said.find((m) => !notOn(m) && !notOpen(m));
       if (fault) throw new Error(`Ask failed on staging: ${fault}`);
+      if (said.some(notOpen)) {
+        throw new Error(
+          'AWS has not opened this model for this AWS account. Everything up to the AI call worked, twice: the lists, the board, the daily count. Sending a message in the AWS playground does not change this one. Ask AWS Support to open the model, or set ASK_MODEL_ID to a model every account has (README, "The AI").',
+        );
+      }
       if (said.length > 0) {
         throw new Error(
-          'The AI is not switched on for this AWS account yet. Everything up to the AI call worked, twice: the lists, the board, the daily count. One time, in the AWS console: Amazon Bedrock, region US East (Ohio), Model catalog, Claude Haiku 5.5, open it in the playground and send one message. Wait up to 15 minutes and run this test again.',
+          'The AI is not switched on for this AWS account yet. Everything up to the AI call worked, twice: the lists, the board, the daily count. One time, in the AWS console: Amazon Bedrock, region US East (Ohio), Model catalog, the model this app uses (README, "The AI"), open it in the playground and send one message. An older Claude model asks for a short form first. Wait up to 15 minutes and run this test again.',
         );
       }
       // line 1 is how the app hears the allergy; the brackets are how it finds the item to label

@@ -16,6 +16,7 @@ import type { AssistantCatalog, BoardNow } from '../../../shared/assistant/catal
 import { NOTHING_OUT, boardNow } from '../../../shared/assistant/catalog';
 import { BadLists, cleanCatalog, countsOf, parseLists } from '../../../shared/assistant/load';
 import { SAMPLE_CATALOGS } from '../../../shared/assistant/sample';
+import { thinksByDefault } from '../../../shared/assistant/model';
 import { conditionFailed, type GqlErrors } from '../../../shared/conditional';
 import { TZ } from '../push/report';
 import {
@@ -64,15 +65,20 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- the AI ----------
 
+// A Claude 5 model thinks before it answers unless told not to. Earlier
+// models answer the quick way as they are, so they are asked as they are.
+const TOLD_NOT_TO_THINK = thinksByDefault(MODEL_ID);
+
 // Set once a model has refused the "no thinking" setting but answered
-// without it (a different model was chosen with ASK_MODEL_ID). From then on
-// this copy of the function asks the plain way.
+// without it. From then on this copy of the function asks the plain way.
 let askPlainly = false;
 
-// One call to the AI: without thinking where the model allows it, the plain
-// way where it does not. Any other failure is the caller's to explain.
+// One call to the AI: without thinking where the model would think, the
+// plain way where it does not or will not. Any other failure is the caller's
+// to explain.
 async function converse(input: ConverseCommandInput & { inferenceConfig: { maxTokens: number } }, ms: number): Promise<ConverseCommandOutput> {
   const send = (request: ConverseCommandInput) => bedrock.send(new ConverseCommand(request), { abortSignal: AbortSignal.timeout(ms) });
+  if (!TOLD_NOT_TO_THINK) return send(input);
   if (!askPlainly) {
     try {
       return await send(thinkingOff(input));
@@ -310,6 +316,7 @@ async function testAi() {
     const problem = problemOf(name, message);
     const summary = {
       off: `AWS refused the call (${name}). The AI is not switched on for this AWS account yet.`,
+      closed: `AWS refused the call (${name}). AWS has not opened this model for your AWS account. No setting of yours changes that.`,
       denied: `AWS refused the call (${name}). This app's own permission does not cover the model. That is a fault in the app's setup, not a step for you.`,
       busy: `The AI did not answer in time (${name}). Try again in a minute.`,
       other: `The AI call failed (${name}).`,

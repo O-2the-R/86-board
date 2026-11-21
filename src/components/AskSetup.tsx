@@ -8,6 +8,7 @@ import { api } from '../api';
 import type { AskAiTest, AskSetup as Setup } from '../api/types';
 import type { Restaurant } from '../types';
 import { BadLists, cleanCatalog, countsOf, parseLists } from '../../shared/assistant/load';
+import { modelLabel } from '../../shared/assistant/model';
 import { fmtDay } from '../lib/format';
 
 interface Props {
@@ -26,6 +27,8 @@ interface Picked {
 }
 
 const count = (n: number, one: string, many: string) => `${n.toLocaleString('en-US')} ${n === 1 ? one : many}`;
+// the model's own name where the test reports which one the app uses
+const modelName = (test: AskAiTest) => (test.model ? modelLabel(test.model) : 'the model this app uses');
 
 export function AskSetup({ restaurants, onChanged }: Props) {
   const [rows, setRows] = useState<Setup[] | null>(null);
@@ -166,10 +169,12 @@ export function AskSetup({ restaurants, onChanged }: Props) {
           </button>
           {test && <span className={'caption ' + (test.ok ? 'ok-text' : 'bad-text')}>{test.summary}</span>}
         </div>
-        {test && !test.ok && (test.problem === 'off' || test.detail) && (
+        {test && !test.ok && (test.problem === 'off' || test.problem === 'closed' || test.detail) && (
           <p className="hint">
             {test.problem === 'off' &&
-              'To switch it on: in the AWS console open Amazon Bedrock, region US East (Ohio). Under Model catalog pick Claude Haiku 5.5 and send one message in the playground. Wait up to 15 minutes, then test again. '}
+              `To switch it on: in the AWS console open Amazon Bedrock, region US East (Ohio). Under Model catalog pick ${modelName(test)} and send one message in the playground. An older Claude model asks for a short form first. Wait up to 15 minutes, then test again. `}
+            {test.problem === 'closed' &&
+              `AWS opens ${modelName(test)} account by account, and your account does not have it yet. Sending a message in the AWS playground will not change that. Ask AWS Support to open it, or set the app to a model that every account has (README, "The AI"). `}
             {test.detail ? `AWS said: ${test.detail}` : ''}
           </p>
         )}

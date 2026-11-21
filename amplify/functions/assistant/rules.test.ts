@@ -116,7 +116,7 @@ describe('the daily limit', () => {
   it('reads its settings, and falls back when one is missing or odd', () => {
     expect(limitFrom('50', 300)).toBe(50);
     for (const odd of [undefined, '', '0', '-5', '2.5', 'many', '999999999']) expect(limitFrom(odd, 300), String(odd)).toBe(300);
-    expect(DEFAULT_LIMITS).toEqual({ restaurant: 300, person: 100 });
+    expect(DEFAULT_LIMITS).toEqual({ restaurant: 100, person: 50 });
   });
 
   it('reads the per-login counts back from text, whatever is in there', () => {
@@ -192,6 +192,14 @@ describe('when the AI call fails', () => {
     const iam = 'User: arn:aws:sts::123456789012:assumed-role/amplify-x-assistantlambdaServiceRole/y is not authorized to perform: bedrock:InvokeModel on resource: arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-5-5 because no identity-based policy allows the bedrock:InvokeModel action';
     expect(problemOf('AccessDeniedException', iam)).toBe('denied');
     expect(SAY.denied).not.toBe(SAY.off);
+  });
+
+  it('knows when AWS has not opened the model for the account, which no step of the owner\'s changes', () => {
+    const gate = 'anthropic.claude-haiku-5-5 is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/';
+    expect(problemOf('AccessDeniedException', gate)).toBe('closed');
+    expect(problemOf('AccessDeniedException', 'Model access is denied.')).toBe('off');
+    expect(SAY.closed).toBe('The AI is not available here yet: AWS has not opened it for this app. Tell the owner.');
+    expect(new Set(Object.values(SAY)).size).toBe(Object.keys(SAY).length);
   });
 
   it('has a plain sentence for each, with nothing about AWS for staff to puzzle over', () => {
