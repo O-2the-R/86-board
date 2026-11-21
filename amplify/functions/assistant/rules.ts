@@ -74,7 +74,7 @@ export interface Limits {
   person: number; // questions a day from one login
 }
 
-export const DEFAULT_LIMITS: Limits = { restaurant: 300, person: 100 };
+export const DEFAULT_LIMITS: Limits = { restaurant: 100, person: 50 };
 
 // A limit from a setting, or the default when the setting is missing or odd.
 export function limitFrom(setting: string | undefined, fallback: number): number {
@@ -143,8 +143,10 @@ export function converseInput(modelId: string, catalog: AssistantCatalog, known:
 }
 
 // Ask's answers are look-ups in the lists, on a phone, mid-service: quick
-// beats deep. Claude Haiku 5.5 thinks before it answers unless told not to
+// beats deep. A Claude 5 model thinks before it answers unless told not to
 // (AWS: thinking.type "disabled", passed through additionalModelRequestFields).
+// Earlier models answer the quick way as they are; shared/assistant/model.ts
+// knows which is which.
 export const thinkingOff = <T extends object>(input: T) => ({ ...input, additionalModelRequestFields: { thinking: { type: 'disabled' } } });
 
 // For a model that refuses that setting: ask without it, with room to think.
@@ -152,15 +154,18 @@ export const withRoomToThink = <T extends { inferenceConfig: { maxTokens: number
 
 // ---------- when the AI call fails ----------
 
-export type ModelProblem = 'off' | 'denied' | 'busy' | 'other';
+export type ModelProblem = 'off' | 'closed' | 'denied' | 'busy' | 'other';
 
-// AWS answers "access denied" for two different things. Either the model is
-// not switched on for this AWS account yet (a one-time step for the owner),
-// or this app's own permission does not cover the model (a fault in the
-// app's setup, which AWS words as "not authorized to perform: bedrock:...").
-// The rest are passing trouble.
+// AWS answers "access denied" for three different things. The model is not
+// switched on for this AWS account yet (a one-time step for the owner). Or
+// AWS has not opened the model for this account at all, which AWS words as
+// "is not available for this account": no step of the owner's changes that,
+// only AWS does, or another model. Or this app's own permission does not
+// cover the model (a fault in the app's setup, which AWS words as "not
+// authorized to perform: bedrock:..."). The rest are passing trouble.
 export function problemOf(errorName: string | undefined, message = ''): ModelProblem {
   if (errorName === 'AccessDeniedException' && /not authorized to perform: bedrock:/i.test(message)) return 'denied';
+  if (errorName === 'AccessDeniedException' && /is not available for this account/i.test(message)) return 'closed';
   if (errorName === 'AccessDeniedException' || errorName === 'ResourceNotFoundException') return 'off';
   if (
     errorName === 'ThrottlingException' ||
@@ -178,6 +183,7 @@ export function problemOf(errorName: string | undefined, message = ''): ModelPro
 
 export const SAY: Record<ModelProblem, string> = {
   off: 'The AI is not switched on for this app yet. The owner turns it on once, in AWS.',
+  closed: 'The AI is not available here yet: AWS has not opened it for this app. Tell the owner.',
   denied: 'The AI is not available: this app is not allowed to call it. Tell the owner.',
   busy: 'The AI is busy right now. Send it again in a moment.',
   other: 'The AI could not answer that. Send it again.',

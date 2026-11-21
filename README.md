@@ -113,59 +113,77 @@ The lists are private:
 
 ### The AI
 
-Claude Haiku 5.5 on Amazon Bedrock, inside the same AWS account as the rest of
+Claude Haiku 4.5 on Amazon Bedrock, inside the same AWS account as the rest of
 the app. There is no API key to keep: the `assistant` function's own role is
 allowed to call that one model and nothing else in the app can
 (`amplify/backend.ts`). It is called through the US profile
-(`us.anthropic.claude-haiku-5-5`), so questions stay in US data centers.
+(`us.anthropic.claude-haiku-4-5-20251001-v1:0`), so questions stay in US data
+centers.
 
 One-time step, per AWS account: the model has to be used once by someone with
 AWS Marketplace permissions (the account's admin login has them).
 
 1. AWS console, Amazon Bedrock, region US East (Ohio).
-2. Model catalog, Claude Haiku 5.5, open it in the playground.
-3. Send one message. AWS switches the model on for the account; it can take
+2. Model catalog, Claude Haiku 4.5, open it in the playground.
+3. Fill in the short use-case form AWS shows for this model (a name, a
+   website such as this repo, what it is for).
+4. Send one message. AWS switches the model on for the account; it can take
    up to 15 minutes.
-4. In the app: Staff, Ask, **Test the AI**. It should say "The AI answered."
+5. In the app: Staff, Ask, **Test the AI**. It should say "The AI answered."
+
+**Why not the newer Claude Haiku 5.5?** It is better and costs about a tenth,
+but AWS opens it account by account. An account that does not have it yet is
+refused with "is not available for this account", and no setting or playground
+message changes that: only AWS Support can open it. Claude Haiku 4.5 is open
+to every account, so it is the default. **Test the AI** tells the two cases
+apart. When AWS has opened 5.5 for your account, set `ASK_MODEL_ID` to
+`us.anthropic.claude-haiku-5-5` in the Amplify app's environment variables and
+deploy again. The app's permission follows that setting, and it tells a
+Claude 5 model not to think before answering, which keeps answers quick.
 
 What the AI is given for every question is built on the server, never by the
 phone: the rules, the restaurant's stored lists and house notes, then the 86
 board as the database has it at that second, and the allergies picked for this
 guest. The phone sends only the chat. The first, fixed part is the same from
 question to question, so AWS keeps it ready for five minutes and charges a
-tenth for reading it again.
+tenth for reading it again. (Claude Haiku 4.5 only does that for a fixed part
+of 4,096 tokens or more. Shorter lists are simply read in full each time.)
 
 The answer arrives whole, in a few seconds. It is not typed out word by word
 yet (see "Next").
 
 ### What Ask costs, and its limits
 
-Prices are Anthropic's list prices for Claude Haiku 5.5 on Amazon Bedrock,
-US profile, in effect since Oct 7, 2026, per million tokens (a token is a
-piece of a word): **$0.11** read, **$0.55** written, **$0.1375** to read
-something and keep it ready for five minutes, **$0.011** to read it again in
-that time.
+Prices are Anthropic's list prices for Claude Haiku 4.5 on Amazon Bedrock,
+US profile, checked Nov 21, 2026, per million tokens (a token is a piece of a
+word): **$1.10** read, **$5.50** written, **$1.375** to read something and
+keep it ready for five minutes, **$0.11** to read it again in that time.
 
 An example, for lists that come to 15,000 tokens and an answer of 200:
 
 | | Cost |
 | --- | --- |
-| A first question | about $0.0022 (a fifth of a cent) |
-| A follow-up within five minutes | about $0.0003 |
-| 100 first questions a day, for 30 days | about $6.50 |
+| A first question | about $0.022 (about 2 cents) |
+| A follow-up within five minutes | about $0.003 |
+| 100 first questions a day, for 30 days | about $65 |
+
+On Claude Haiku 5.5 every one of those prices is a tenth ($0.11, $0.55,
+$0.1375, $0.011), so the same first question is about a fifth of a cent.
 
 Limits, so a stolen login or a mistake cannot run up the bill:
 
-- **300 questions a day per restaurant**, and **100 a day per login**. At the
-  first-question price above, a restaurant at its limit costs about $0.65 a
+- **100 questions a day per restaurant**, and **50 a day per login**. At the
+  first-question price above, a restaurant at its limit costs about $2.20 a
   day. Change them with `ASK_DAILY_LIMIT` and `ASK_PERSON_DAILY_LIMIT` in the
-  Amplify app's environment variables.
+  Amplify app's environment variables. (They were 300 and 100 while the app
+  was set to Claude Haiku 5.5.)
 - A question is counted before the AI is called, in a way that holds when many
   arrive at the same moment.
 - A message can be 1,000 characters. An answer is capped at about 400 words.
 - A lists file can be 250,000 bytes, and what the AI reads from it 150,000
-  characters. That keeps every question far below 100,000 tokens, where the
-  price per token goes up.
+  characters. That keeps every question far below what Claude Haiku 4.5 can
+  read at once (200,000 tokens), and below 100,000 tokens, where Claude Haiku
+  5.5 charges more per token.
 
 Where to see it: Staff, Ask shows questions today and in the last 30 days for
 each restaurant. The money is on the AWS bill under the model's own name (it

@@ -92,7 +92,7 @@ type Handler = (event: never) => Promise<unknown>;
 async function boot(settings: Record<string, string> = {}): Promise<Handler> {
   vi.resetModules();
   for (const key of ['ASK_SAMPLE_LISTS', 'ASK_DAILY_LIMIT', 'ASK_PERSON_DAILY_LIMIT']) delete process.env[key];
-  process.env.ASK_MODEL_ID = 'us.test-model';
+  process.env.ASK_MODEL_ID = 'us.anthropic.claude-haiku-5-5'; // a model that thinks unless told not to
   Object.assign(process.env, settings);
   return (await import('./handler')).handler as unknown as Handler;
 }
@@ -141,7 +141,7 @@ describe('the owner loads a restaurant\'s lists', () => {
   it('keeps them to the owner until the owner opens Ask to the staff there', async () => {
     const handler = await boot();
     const loaded = await manage(handler, OWNER, { action: 'load', restaurantId: 'main', lists: FILE });
-    expect(loaded.restaurants[0]).toMatchObject({ restaurantId: 'main', loaded: true, sample: false, staffCanUse: false, name: 'Pepe', items: 2, notes: 1, loadedBy: 'Omar', questionsToday: 0, dailyLimit: 300 });
+    expect(loaded.restaurants[0]).toMatchObject({ restaurantId: 'main', loaded: true, sample: false, staffCanUse: false, name: 'Pepe', items: 2, notes: 1, loadedBy: 'Omar', questionsToday: 0, dailyLimit: 100 });
 
     expect((await lists(handler, OWNER, 'main'))?.name).toBe('Pepe');
     for (const who of [SERVER, MANAGER, WATER_SERVER]) expect(await lists(handler, who, 'main')).toBeNull();
@@ -221,13 +221,29 @@ describe('a question', () => {
     const res = await ask(handler, SERVER, 'main', 'Egg allergy. Tiramisu?', ['egg', 'made-up']);
     expect(res).toEqual({ text: 'ALLERGIES: none | OTHER: none\n\n[[Tiramisu]] is on.', truncated: false });
     const sent = fake.sent[0].input;
-    expect(sent.modelId).toBe('us.test-model');
+    expect(sent.modelId).toBe('us.anthropic.claude-haiku-5-5');
     expect(sent.system?.[0].text).toContain('You are Pepe, the bar and allergy helper for the floor staff at a made-up trattoria for this test');
     expect(sent.system?.[0].text).toContain('Tiramisu | Desserts | every menu | Mascarpone, espresso, cocoa | AVOID: egg');
     expect(sent.system?.[2].text).toBe("86 BOARD, right now\n86'D: Tiramisu\n\nKNOWN SO FAR, this guest cannot have: egg");
     expect(sent.messages).toEqual([{ role: 'user', content: [{ text: 'Egg allergy. Tiramisu?' }] }]);
     expect(sent.inferenceConfig.maxTokens).toBe(700);
     expect(sent.additionalModelRequestFields).toEqual({ thinking: { type: 'disabled' } });
+  });
+
+  it('asks a model that does not think by itself just as it is', async () => {
+    const handler = await loadedAndOpen({ ASK_MODEL_ID: 'us.anthropic.claude-haiku-4-5-20251001-v1:0' });
+    expect((await ask(handler, SERVER, 'main')).text).toContain('Tiramisu');
+    expect(fake.sent).toHaveLength(1);
+    const sent = fake.sent[0].input;
+    expect(sent.modelId).toBe('us.anthropic.claude-haiku-4-5-20251001-v1:0');
+    expect(sent.additionalModelRequestFields).toBeUndefined();
+    expect(sent.inferenceConfig.maxTokens).toBe(700);
+    // and a refusal is a refusal: there is no second way to ask
+    fake.answer = () => {
+      throw Object.assign(new Error('The model returned the following errors: Input is too long'), { name: 'ValidationException' });
+    };
+    expect(await refusal(ask(handler, SERVER, 'main'))).toBe('The AI could not answer that. Send it again.');
+    expect(fake.sent).toHaveLength(2);
   });
 
   it('asks the plain way when a model refuses the no-thinking setting, and remembers', async () => {
@@ -376,6 +392,18 @@ describe('the owner\'s test of the AI', () => {
       summary: 'AWS refused the call (AccessDeniedException). The AI is not switched on for this AWS account yet.',
       detail: 'Model access is denied.',
     });
+  });
+
+  it('says so when AWS has not opened the model for the account, which the playground cannot fix', async () => {
+    const handler = await boot();
+    fake.answer = () => {
+      throw Object.assign(new Error('anthropic.claude-haiku-5-5 is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/'), { name: 'AccessDeniedException' });
+    };
+    const res = (await manage(handler, OWNER, { action: 'test' })) as unknown as { ok: boolean; problem: string; summary: string; model: string };
+    expect(res).toMatchObject({ ok: false, problem: 'closed', model: 'us.anthropic.claude-haiku-5-5' });
+    expect(res.summary).toBe('AWS refused the call (AccessDeniedException). AWS has not opened this model for your AWS account. No setting of yours changes that.');
+    await manage(handler, OWNER, { action: 'load', restaurantId: 'main', lists: FILE });
+    expect(await refusal(ask(handler, OWNER, 'main'))).toBe('The AI is not available here yet: AWS has not opened it for this app. Tell the owner.');
   });
 
   it('says so when the fault is the app\'s own permission, which is not the owner\'s to fix in AWS', async () => {

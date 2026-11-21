@@ -113,7 +113,7 @@ export interface MenuSync {
 
 export interface AskAiTest {
   ok: boolean;
-  problem?: 'off' | 'denied' | 'busy' | 'other'; // off: the model is not switched on for the AWS account yet
+  problem?: 'off' | 'closed' | 'denied' | 'busy' | 'other'; // off: not switched on for the AWS account yet; closed: AWS has not opened the model for the account
   summary: string; // one sentence for the owner
   detail?: string; // AWS's own words when it refused
   model?: string;

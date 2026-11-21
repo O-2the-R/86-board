@@ -122,7 +122,12 @@ backend.push.addEnvironment('APP_URL', appUrl);
 // The model is named by its "inference profile": us.<model> keeps every
 // question inside US data centers (the price list calls this Geo). Set
 // ASK_MODEL_ID on the Amplify app to change the model without a code change.
-const ASK_MODEL_ID = process.env.ASK_MODEL_ID || 'us.anthropic.claude-haiku-5-5';
+//
+// Claude Haiku 4.5 is the default because AWS opens it to every account.
+// The newer, cheaper Claude Haiku 5.5 (us.anthropic.claude-haiku-5-5) is
+// opened by AWS account by account; an account that does not have it yet
+// gets "is not available for this account" (README, "The AI").
+const ASK_MODEL_ID = process.env.ASK_MODEL_ID || 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 const assistantLambda = backend.assistant.resources.lambda;
 const assistantStack = Stack.of(assistantLambda);
 const viaProfile = /^(us|eu|apac|jp|au|ca|in|us-gov|global)\.(.+)$/.exec(ASK_MODEL_ID);
@@ -146,8 +151,8 @@ if (viaProfile) {
 }
 backend.assistant.addEnvironment('ASK_MODEL_ID', ASK_MODEL_ID);
 // Questions a day: at one restaurant, and from one login. They cap the bill.
-backend.assistant.addEnvironment('ASK_DAILY_LIMIT', process.env.ASK_DAILY_LIMIT || '300');
-backend.assistant.addEnvironment('ASK_PERSON_DAILY_LIMIT', process.env.ASK_PERSON_DAILY_LIMIT || '100');
+backend.assistant.addEnvironment('ASK_DAILY_LIMIT', process.env.ASK_DAILY_LIMIT || '100');
+backend.assistant.addEnvironment('ASK_PERSON_DAILY_LIMIT', process.env.ASK_PERSON_DAILY_LIMIT || '50');
 // On staging a sample restaurant with no lists of its own answers from the
 // made-up sample lists, so the staging test can ask the AI a real question
 // as demo staff. Everywhere else Ask exists only where the owner loaded lists.
